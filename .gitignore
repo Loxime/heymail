@@ -1,0 +1,91 @@
+# ================================================================
+# HeyMail — Git ignore policy
+# Goal: never commit local secrets, credentials or generated data.
+# ================================================================
+
+# --- Environment / application secrets ---
+.env
+.env.*
+!.env.example
+!.env.*.example
+
+# --- Secret stores ---
+secrets/**
+!secrets/README.md
+
+# --- Private keys / credential containers ---
+*.key
+*.pem
+*.p12
+*.pfx
+*.jks
+*.keystore
+id_rsa
+id_rsa.*
+id_ed25519
+id_ed25519.*
+
+# --- Composer / PHP ---
+/vendor/
+/var/
+.phpunit.result.cache
+.phpunit.cache/
+.phpstan.cache/
+
+# --- Node / frontend ---
+/node_modules/
+**/node_modules/
+/dist/
+**/dist/
+/build/
+**/build/
+coverage/
+**/coverage/
+.npm/
+.pnpm-store/
+
+# --- Tauri / Rust (future desktop client) ---
+/target/
+**/target/
+
+# --- Capacitor / mobile generated files (future) ---
+**/android/.gradle/
+**/android/local.properties
+**/ios/App/Pods/
+
+# --- Docker / local runtime data ---
+.docker-data/
+docker-data/
+volumes/
+*.pid
+
+# --- Logs / temporary files ---
+*.log
+logs/
+tmp/
+temp/
+*.tmp
+*.swp
+*.swo
+*~
+
+# --- IDE / editor ---
+.idea/
+.vscode/
+*.code-workspace
+
+# --- OS metadata ---
+.DS_Store
+Thumbs.db
+
+# --- Local test artefacts ---
+test-results/
+playwright-report/
+
+# --- Backup files that may contain secrets ---
+*.bak
+*.backup
+*.dump
+*.sql
+*.sqlite
+*.sqlite3

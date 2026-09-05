@@ -1,0 +1,32 @@
+name: heymail
+
+# Phase 01 will progressively add the real services.
+# This file is intentionally valid but contains no running service yet.
+services: {}
+
+# Trust boundaries are declared from the first commit so that future
+# containers are attached only to networks they genuinely need.
+networks:
+  frontend_net:
+    name: heymail_frontend
+    driver: bridge
+
+  data_net:
+    name: heymail_data
+    driver: bridge
+    internal: true
+
+  mail_net:
+    name: heymail_mail
+    driver: bridge
+    internal: true
+
+  filter_net:
+    name: heymail_filter
+    driver: bridge
+    internal: true
+
+  smtp_lab_net:
+    name: heymail_smtp_lab
+    driver: bridge
+    internal: true
