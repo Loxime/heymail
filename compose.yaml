@@ -1,6 +1,11 @@
 name: heymail
 
 services:
+
+  # =========================================================================
+  # PostgreSQL
+  # =========================================================================
+
   database:
     image: postgres:18.4-alpine3.23@sha256:996d0920e4ff9df1fc19dacb904492f3c1ec0ec1cc338f0ad7123be7731c5f5e
 
@@ -9,8 +14,15 @@ services:
     environment:
       POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB is required}
       POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER is required}
+
       POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
-      POSTGRES_INITDB_ARGS: --auth-host=scram-sha-256 --auth-local=scram-sha-256
+
+      POSTGRES_INITDB_ARGS: >-
+        --auth-host=scram-sha-256
+        --auth-local=scram-sha-256
+        --encoding=UTF8
+        --locale-provider=builtin
+        --builtin-locale=C.UTF-8
 
     secrets:
       - postgres_password
@@ -51,7 +63,64 @@ services:
     stop_grace_period: 30s
 
 
+  # =========================================================================
+  # PostgreSQL bootstrap
+  #
+  # Short-lived provisioning service.
+  # It creates/updates the limited application and migration roles.
+  # =========================================================================
+
+  database-bootstrap:
+    image: postgres:18.4-alpine3.23@sha256:996d0920e4ff9df1fc19dacb904492f3c1ec0ec1cc338f0ad7123be7731c5f5e
+
+    restart: "no"
+
+    user: "${HEYMAIL_UID:?HEYMAIL_UID is required}:${HEYMAIL_GID:?HEYMAIL_GID is required}"
+
+    entrypoint:
+      - /bin/sh
+      - /opt/heymail/bootstrap-roles.sh
+
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB is required}
+      POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER is required}
+
+      PGHOST: database
+      PGPORT: "5432"
+
+    secrets:
+      - postgres_password
+      - postgres_app_password
+      - postgres_migrator_password
+
+    volumes:
+      - ./docker/postgres/bootstrap/bootstrap-roles.sh:/opt/heymail/bootstrap-roles.sh:ro
+
+    networks:
+      - data_net
+
+    depends_on:
+      database:
+        condition: service_healthy
+
+    read_only: true
+
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+
+    security_opt:
+      - no-new-privileges:true
+
+    cap_drop:
+      - ALL
+
+    pids_limit: 50
+    mem_limit: 128m
+    cpus: 0.25
+
+
 networks:
+
   frontend_net:
     name: heymail_frontend
     driver: bridge
@@ -78,10 +147,21 @@ networks:
 
 
 volumes:
+
   postgres_data:
     name: heymail_postgres_data
 
 
 secrets:
+
   postgres_password:
     file: ./secrets/postgres_password
+
+  postgres_app_password:
+    file: ./secrets/postgres_app_password
+
+  postgres_migrator_password:
+    file: ./secrets/postgres_migrator_password
+
+  app_secret:
+    file: ./secrets/app_secret
