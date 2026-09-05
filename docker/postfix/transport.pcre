@@ -1,0 +1,3 @@
+/(^|@)success[.]test$/   smtp:[fake-mx-success]:2525
+/(^|@)tempfail[.]test$/  smtp:[fake-mx-tempfail]:2525
+/(^|@)permfail[.]test$/  smtp:[fake-mx-permfail]:2525

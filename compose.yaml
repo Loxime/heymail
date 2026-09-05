@@ -194,6 +194,206 @@ services:
     stop_grace_period: 15s
 
 
+  # =========================================================================
+  # Postfix SMTP laboratory
+  # =========================================================================
+
+  postfix:
+    build:
+      context: .
+      dockerfile: docker/postfix/Dockerfile
+
+    image: heymail-postfix:lab
+
+    restart: unless-stopped
+
+    read_only: true
+
+    networks:
+      - smtp_lab_net
+
+    depends_on:
+      fake-mx-success:
+        condition: service_healthy
+
+      fake-mx-tempfail:
+        condition: service_healthy
+
+      fake-mx-permfail:
+        condition: service_healthy
+
+    volumes:
+      - postfix_queue:/var/spool/postfix
+      - postfix_data:/var/lib/postfix
+
+    security_opt:
+      - no-new-privileges:true
+
+    cap_drop:
+      - ALL
+
+    cap_add:
+      - SETUID
+      - SETGID
+      - DAC_OVERRIDE
+
+    pids_limit: 100
+    mem_limit: 256m
+    cpus: 0.50
+
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "/usr/local/bin/heymail-postfix-healthcheck"
+        ]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+
+    stop_grace_period: 15s
+
+
+  # =========================================================================
+  # Fake MX - successful delivery
+  # =========================================================================
+
+  fake-mx-success:
+    build:
+      context: .
+      dockerfile: docker/smtp-lab/Dockerfile
+
+    image: heymail-fake-mx:lab
+
+    restart: unless-stopped
+
+    environment:
+      FAKE_MX_MODE: success
+
+    networks:
+      - smtp_lab_net
+
+    expose:
+      - "2525"
+
+    read_only: true
+
+    tmpfs:
+      - /tmp:size=8m,mode=1777
+
+    security_opt:
+      - no-new-privileges:true
+
+    cap_drop:
+      - ALL
+
+    pids_limit: 30
+    mem_limit: 32m
+    cpus: 0.10
+
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "RESPONSE=\"$$(printf 'QUIT\\r\\n' | socat -T1 - TCP:127.0.0.1:2525,connect-timeout=1 2>/dev/null)\"; printf '%s\\n' \"$$RESPONSE\" | grep -q '^220 '"
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 3s
+
+
+  # =========================================================================
+  # Fake MX - temporary failure
+  # =========================================================================
+
+  fake-mx-tempfail:
+    image: heymail-fake-mx:lab
+
+    restart: unless-stopped
+
+    environment:
+      FAKE_MX_MODE: tempfail
+
+    networks:
+      - smtp_lab_net
+
+    expose:
+      - "2525"
+
+    read_only: true
+
+    tmpfs:
+      - /tmp:size=8m,mode=1777
+
+    security_opt:
+      - no-new-privileges:true
+
+    cap_drop:
+      - ALL
+
+    pids_limit: 30
+    mem_limit: 32m
+    cpus: 0.10
+
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "RESPONSE=\"$$(printf 'QUIT\\r\\n' | socat -T1 - TCP:127.0.0.1:2525,connect-timeout=1 2>/dev/null)\"; printf '%s\\n' \"$$RESPONSE\" | grep -q '^220 '"
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 3s
+
+
+  # =========================================================================
+  # Fake MX - permanent failure
+  # =========================================================================
+
+  fake-mx-permfail:
+    image: heymail-fake-mx:lab
+
+    restart: unless-stopped
+
+    environment:
+      FAKE_MX_MODE: permfail
+
+    networks:
+      - smtp_lab_net
+
+    expose:
+      - "2525"
+
+    read_only: true
+
+    tmpfs:
+      - /tmp:size=8m,mode=1777
+
+    security_opt:
+      - no-new-privileges:true
+
+    cap_drop:
+      - ALL
+
+    pids_limit: 30
+    mem_limit: 32m
+    cpus: 0.10
+
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "RESPONSE=\"$$(printf 'QUIT\\r\\n' | socat -T1 - TCP:127.0.0.1:2525,connect-timeout=1 2>/dev/null)\"; printf '%s\\n' \"$$RESPONSE\" | grep -q '^220 '"
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 3s
+
+
 networks:
 
   frontend_net:
@@ -225,6 +425,12 @@ volumes:
 
   postgres_data:
     name: heymail_postgres_data
+
+  postfix_queue:
+    name: heymail_postfix_queue
+
+  postfix_data:
+    name: heymail_postfix_data
 
 
 secrets:
