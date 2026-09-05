@@ -1,11 +1,56 @@
 name: heymail
 
-# Phase 01 will progressively add the real services.
-# This file is intentionally valid but contains no running service yet.
-services: {}
+services:
+  database:
+    image: postgres:18.4-alpine3.23@sha256:996d0920e4ff9df1fc19dacb904492f3c1ec0ec1cc338f0ad7123be7731c5f5e
 
-# Trust boundaries are declared from the first commit so that future
-# containers are attached only to networks they genuinely need.
+    restart: unless-stopped
+
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB is required}
+      POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER is required}
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+      POSTGRES_INITDB_ARGS: --auth-host=scram-sha-256 --auth-local=scram-sha-256
+
+    secrets:
+      - postgres_password
+
+    volumes:
+      - postgres_data:/var/lib/postgresql
+
+    networks:
+      - data_net
+
+    expose:
+      - "5432"
+
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -h 127.0.0.1 -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+
+    security_opt:
+      - no-new-privileges:true
+
+    read_only: true
+
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+      - /var/run/postgresql:size=16m,mode=3777
+
+    pids_limit: 200
+    mem_limit: 768m
+    cpus: 1.0
+
+    stop_grace_period: 30s
+
+
 networks:
   frontend_net:
     name: heymail_frontend
@@ -30,3 +75,13 @@ networks:
     name: heymail_smtp_lab
     driver: bridge
     internal: true
+
+
+volumes:
+  postgres_data:
+    name: heymail_postgres_data
+
+
+secrets:
+  postgres_password:
+    file: ./secrets/postgres_password
