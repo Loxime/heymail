@@ -616,24 +616,20 @@ NETWORKS="$(
         | sort
 )"
 
-[ "$NETWORKS" = "heymail_data" ] \
+EXPECTED_NETWORKS=$'heymail_data\nheymail_mail'
+
+[ "$NETWORKS" = "$EXPECTED_NETWORKS" ] \
     || fail "unexpected worker networks: $NETWORKS"
 
-if docker compose exec \
-    -T \
-    mail-worker \
-    php -r '
-        if (gethostbyname("postfix") !== "postfix") {
-            exit(1);
-        }
-    '
-then
-    :
-else
-    fail "Postfix became resolvable from mail-worker"
-fi
+MAIL_INTERNAL="$(
+    docker network inspect heymail_mail \
+        --format '{{.Internal}}'
+)"
 
-pass "mail-worker remains isolated from Postfix"
+[ "$MAIL_INTERNAL" = "true" ] \
+    || fail "heymail_mail is not internal"
+
+pass "mail-worker uses only isolated data and mail networks"
 
 echo
 echo "ALL OUTBOUND MESSENGER INTEGRATION TESTS PASSED"

@@ -233,6 +233,7 @@ services:
 
     networks:
       - data_net
+      - mail_net
 
     depends_on:
       database:
@@ -358,6 +359,7 @@ services:
     networks:
       - smtp_lab_net
       - filter_net
+      - mail_net
 
     depends_on:
       rspamd:

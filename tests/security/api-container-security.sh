@@ -205,6 +205,14 @@ DATA_INTERNAL="$(
 
 pass "heymail_data is internal"
 
+docker compose exec -T api     php -r '
+        if (gethostbyname("postfix") !== "postfix") {
+            exit(1);
+        }
+    '     || fail "Postfix is unexpectedly reachable from API"
+
+pass "Postfix is absent from API network namespace"
+
 # ---------------------------------------------------------------------------
 # FPM exposure
 # ---------------------------------------------------------------------------

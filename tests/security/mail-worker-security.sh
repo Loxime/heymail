@@ -42,6 +42,7 @@ assert "no-new-privileges:true" in (
 
 assert set(worker.get("networks") or []) == {
     "data_net",
+    "mail_net",
 }
 
 assert not worker.get("ports")
@@ -93,6 +94,7 @@ docker compose up \
     --build \
     --force-recreate \
     mail-worker \
+    postfix \
     >/dev/null
 
 WORKER_CONTAINER="$(
@@ -294,7 +296,9 @@ NETWORKS="$(
         | sort
 )"
 
-[ "$NETWORKS" = "heymail_data" ] \
+EXPECTED_NETWORKS=$'heymail_data\nheymail_mail'
+
+[ "$NETWORKS" = "$EXPECTED_NETWORKS" ] \
     || fail "unexpected mail-worker networks: $NETWORKS"
 
 DATA_INTERNAL="$(
@@ -305,11 +309,64 @@ DATA_INTERNAL="$(
 [ "$DATA_INTERNAL" = "true" ] \
     || fail "heymail_data is not an internal Docker network"
 
-pass "mail-worker belongs only to internal heymail_data"
+MAIL_INTERNAL="$(
+    docker network inspect heymail_mail \
+        --format '{{.Internal}}'
+)"
+
+[ "$MAIL_INTERNAL" = "true" ] \
+    || fail "heymail_mail is not an internal Docker network"
+
+pass "mail-worker belongs only to internal heymail_data and heymail_mail"
+
+
+POSTFIX_IP="$(
+    docker compose exec -T mail-worker \
+        php -r '
+            $ip = gethostbyname("postfix");
+
+            if ($ip === "postfix") {
+                exit(1);
+            }
+
+            echo $ip;
+        '
+)" || fail "postfix is not resolvable from mail-worker"
+
+[ -n "$POSTFIX_IP" ] \
+    || fail "postfix resolved to an empty address"
+
+pass "postfix is reachable through mail_net DNS ($POSTFIX_IP)"
+
+
+for PORT in 25 10025
+do
+    docker compose exec -T mail-worker \
+        php -r '
+            $port = (int) $argv[1];
+            $errno = 0;
+            $error = "";
+
+            $socket = @fsockopen(
+                "postfix",
+                $port,
+                $errno,
+                $error,
+                1.0,
+            );
+
+            if (is_resource($socket)) {
+                fclose($socket);
+                exit(1);
+            }
+        ' "$PORT" \
+        || fail "Postfix unexpectedly accepts TCP on port $PORT"
+done
+
+pass "Postfix network path exists but SMTP listeners remain closed"
 
 
 for HOST in \
-    postfix \
     rspamd \
     fake-mx-success
 do
