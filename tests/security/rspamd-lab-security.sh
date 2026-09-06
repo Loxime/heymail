@@ -518,25 +518,94 @@ docker run --rm \
 pass "Rspamd Milter is reachable from the authorized filter network"
 
 
-for SERVICE in api postfix
-do
-    SERVICE_CONTAINER="$(docker compose ps -q "$SERVICE" 2>/dev/null || true)"
+COMPOSE_JSON="$(
+    docker compose config --format json
+)"
 
-    [ -n "$SERVICE_CONTAINER" ] || continue
+FILTER_NET_CONSUMERS="$(
+    python3 -c '
+import json
+import sys
 
-    SERVICE_NETWORKS="$(
-        docker inspect "$SERVICE_CONTAINER" \
+config = json.load(sys.stdin)
+consumers = []
+
+for name, service in sorted(config["services"].items()):
+    networks = service.get("networks") or {}
+
+    if isinstance(networks, dict):
+        network_names = set(networks.keys())
+    else:
+        network_names = set(networks)
+
+    if "filter_net" in network_names:
+        consumers.append(name)
+
+print("\n".join(consumers))
+' <<<"$COMPOSE_JSON"
+)"
+
+EXPECTED_FILTER_NET_CONSUMERS="$(
+    printf '%s\n' \
+        postfix \
+        rspamd
+)"
+
+[ "$FILTER_NET_CONSUMERS" = "$EXPECTED_FILTER_NET_CONSUMERS" ] \
+    || {
+        printf 'Unexpected filter_net consumers:\n%s\n' \
+            "$FILTER_NET_CONSUMERS" >&2
+
+        fail "filter_net trust boundary is broader than expected"
+    }
+
+pass "only Postfix and Rspamd are attached to filter_net"
+
+
+API_CONTAINER="$(
+    docker compose ps -q api 2>/dev/null || true
+)"
+
+if [ -n "$API_CONTAINER" ]; then
+    API_NETWORKS="$(
+        docker inspect "$API_CONTAINER" \
             --format '{{range $name, $_ := .NetworkSettings.Networks}}{{println $name}}{{end}}'
     )"
 
-    if printf '%s\n' "$SERVICE_NETWORKS" \
+    if printf '%s\n' "$API_NETWORKS" \
         | grep -x "$RSPAMD_NETWORK" >/dev/null
     then
-        fail "${SERVICE} is prematurely connected to filter_net"
+        fail "API is connected to filter_net"
     fi
-done
+fi
 
-pass "API and Postfix remain isolated from filter_net"
+pass "API remains isolated from filter_net"
+
+
+POSTFIX_CONTAINER="$(
+    docker compose ps -q postfix 2>/dev/null || true
+)"
+
+if [ -n "$POSTFIX_CONTAINER" ]; then
+    POSTFIX_NETWORKS="$(
+        docker inspect "$POSTFIX_CONTAINER" \
+            --format '{{range $name, $_ := .NetworkSettings.Networks}}{{println $name}}{{end}}' \
+            | sed '/^[[:space:]]*$/d' \
+            | sort
+    )"
+
+    EXPECTED_POSTFIX_NETWORKS="$(
+        printf '%s\n' \
+            heymail_filter \
+            heymail_smtp_lab \
+            | sort
+    )"
+
+    [ "$POSTFIX_NETWORKS" = "$EXPECTED_POSTFIX_NETWORKS" ] \
+        || fail "Postfix has unexpected filter-network membership"
+fi
+
+pass "Postfix is the only intended MTA bridge to filter_net"
 
 
 if docker exec "$RSPAMD_CONTAINER" \

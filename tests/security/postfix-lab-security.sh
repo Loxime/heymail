@@ -16,7 +16,10 @@ pass() {
 docker compose config --quiet \
     || fail "Compose configuration is invalid"
 
-docker compose up -d \
+docker compose up \
+    -d \
+    --build \
+    --force-recreate \
     fake-mx-success \
     fake-mx-tempfail \
     fake-mx-permfail \
@@ -40,20 +43,30 @@ NETWORKS="$(
         | sort
 )"
 
-[ "$NETWORKS" = "heymail_smtp_lab" ] \
-    || fail "unexpected Postfix networks: $NETWORKS"
-
-pass "Postfix belongs only to heymail_smtp_lab"
-
-INTERNAL="$(
-    docker network inspect heymail_smtp_lab \
-        --format '{{.Internal}}'
+EXPECTED_NETWORKS="$(
+    printf '%s\n' \
+        heymail_filter \
+        heymail_smtp_lab \
+        | sort
 )"
 
-[ "$INTERNAL" = "true" ] \
-    || fail "SMTP laboratory network is not internal"
+[ "$NETWORKS" = "$EXPECTED_NETWORKS" ] \
+    || fail "unexpected Postfix networks: $NETWORKS"
 
-pass "SMTP laboratory network is internal"
+pass "Postfix belongs only to smtp_lab_net and filter_net"
+
+for NETWORK in heymail_filter heymail_smtp_lab
+do
+    INTERNAL="$(
+        docker network inspect "$NETWORK" \
+            --format '{{.Internal}}'
+    )"
+
+    [ "$INTERNAL" = "true" ] \
+        || fail "${NETWORK} is not internal"
+done
+
+pass "Postfix networks are both internal"
 
 PORT_BINDINGS="$(
     docker inspect "$POSTFIX_CONTAINER" \
@@ -74,9 +87,14 @@ pass "Postfix publishes no host ports"
 # Docker daemon / privilege boundary currently enforced
 # ---------------------------------------------------------------------------
 
-if docker inspect "$POSTFIX_CONTAINER" \
-    --format '{{range .Mounts}}{{println .Destination}}{{end}}' \
-    | grep -Fxq '/var/run/docker.sock'
+POSTFIX_MOUNT_DESTINATIONS="$(
+    docker inspect "$POSTFIX_CONTAINER" \
+        --format '{{range .Mounts}}{{println .Destination}}{{end}}'
+)"
+
+if grep -Fx     '/var/run/docker.sock' \
+    <<<"$POSTFIX_MOUNT_DESTINATIONS" \
+    >/dev/null
 then
     fail "Docker socket is exposed to Postfix"
 fi
@@ -211,7 +229,14 @@ POSTCONF="$(
         relayhost \
         transport_maps \
         default_transport \
-        relay_transport
+        relay_transport \
+        non_smtpd_milters \
+        smtpd_milters \
+        milter_default_action \
+        milter_protocol \
+        milter_connect_timeout \
+        milter_command_timeout \
+        milter_content_timeout
 )"
 
 grep -Fxq \
@@ -245,6 +270,48 @@ grep -Fxq \
     || fail "relay transport is not disabled"
 
 pass "Postfix laboratory transport policy is enforced"
+
+grep -Fxq \
+    'non_smtpd_milters = inet:rspamd:11332' \
+    <<<"$POSTCONF" \
+    || fail "Postfix non-SMTP Milter is not Rspamd"
+
+grep -Fxq \
+    'smtpd_milters =' \
+    <<<"$POSTCONF" \
+    || fail "network smtpd Milter policy is unexpectedly enabled"
+
+grep -Fxq \
+    'milter_default_action = tempfail' \
+    <<<"$POSTCONF" \
+    || fail "Postfix Milter failure policy is not tempfail"
+
+grep -Fxq \
+    'milter_protocol = 6' \
+    <<<"$POSTCONF" \
+    || fail "unexpected Postfix Milter protocol"
+
+grep -Fxq \
+    'milter_connect_timeout = 5s' \
+    <<<"$POSTCONF" \
+    || fail "unexpected Postfix Milter connect timeout"
+
+grep -Fxq \
+    'milter_command_timeout = 5s' \
+    <<<"$POSTCONF" \
+    || fail "unexpected Postfix Milter command timeout"
+
+grep -Fxq \
+    'milter_content_timeout = 10s' \
+    <<<"$POSTCONF" \
+    || fail "unexpected Postfix Milter content timeout"
+
+docker compose exec -T postfix \
+    sh -lc 'nc -z -w 3 rspamd 11332' \
+    || fail "Postfix cannot reach the Rspamd Milter"
+
+pass "Postfix Milter policy is fail-closed and Rspamd is reachable"
+
 
 # ---------------------------------------------------------------------------
 # No network-facing smtpd

@@ -211,8 +211,12 @@ services:
 
     networks:
       - smtp_lab_net
+      - filter_net
 
     depends_on:
+      rspamd:
+        condition: service_healthy
+
       fake-mx-success:
         condition: service_healthy
 
@@ -270,6 +274,7 @@ services:
 
     environment:
       FAKE_MX_MODE: success
+      FAKE_MX_CAPTURE_DIR: /capture
 
     networks:
       - smtp_lab_net
@@ -281,6 +286,7 @@ services:
 
     tmpfs:
       - /tmp:size=8m,mode=1777
+      - /capture:size=8m,uid=10001,gid=10001,mode=0700
 
     security_opt:
       - no-new-privileges:true
@@ -497,6 +503,42 @@ services:
 
     stop_grace_period: 15s
 
+
+
+  # =========================================================================
+  # DKIM cryptographic verification laboratory
+  # =========================================================================
+
+  dkim-verifier:
+    build:
+      context: .
+      dockerfile: docker/dkim-verifier/Dockerfile
+
+    image: heymail-dkim-verifier:lab
+
+    restart: "no"
+
+    user: "10002:10002"
+
+    network_mode: "none"
+
+    read_only: true
+
+    environment:
+      PYTHONDONTWRITEBYTECODE: "1"
+
+    volumes:
+      - rspamd_dkim_public:/public:ro
+
+    security_opt:
+      - no-new-privileges:true
+
+    cap_drop:
+      - ALL
+
+    pids_limit: 20
+    mem_limit: 128m
+    cpus: 0.25
 
 networks:
 
