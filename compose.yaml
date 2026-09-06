@@ -394,6 +394,58 @@ services:
       start_period: 3s
 
 
+
+  # =========================================================================
+  # Rspamd filtering laboratory
+  # =========================================================================
+
+  rspamd:
+    build:
+      context: .
+      dockerfile: docker/rspamd/Dockerfile
+
+    image: heymail-rspamd:lab
+
+    restart: unless-stopped
+
+    user: "100:101"
+
+    read_only: true
+
+    networks:
+      - filter_net
+
+    expose:
+      - "11332"
+
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+      - /var/lib/rspamd:size=32m,uid=100,gid=101,mode=0750
+
+    security_opt:
+      - no-new-privileges:true
+
+    cap_drop:
+      - ALL
+
+    pids_limit: 50
+    mem_limit: 256m
+    cpus: 0.50
+
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "/usr/local/bin/heymail-rspamd-healthcheck"
+        ]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+      start_period: 60s
+
+    stop_grace_period: 15s
+
+
 networks:
 
   frontend_net:
