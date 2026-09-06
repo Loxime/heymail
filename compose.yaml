@@ -195,6 +195,82 @@ services:
 
 
   # =========================================================================
+  # Outbound mail worker
+  #
+  # Consumes the Doctrine Messenger outbound queue.
+  # At this stage it has database access only: no Postfix/mail network access.
+  # =========================================================================
+
+  mail-worker:
+    build:
+      context: .
+      dockerfile: docker/php/Dockerfile
+      args:
+        HEYMAIL_UID: ${HEYMAIL_UID:?HEYMAIL_UID is required}
+        HEYMAIL_GID: ${HEYMAIL_GID:?HEYMAIL_GID is required}
+
+    image: heymail-api:local
+
+    restart: unless-stopped
+
+    user: "${HEYMAIL_UID:?HEYMAIL_UID is required}:${HEYMAIL_GID:?HEYMAIL_GID is required}"
+
+    environment:
+      APP_ENV: prod
+      APP_DEBUG: "0"
+      APP_RUNTIME_OPTIONS: '{"disable_dotenv":true}'
+      APP_SECRET_FILE: /run/secrets/app_secret
+
+      DB_HOST: database
+      DB_PORT: "5432"
+      DB_NAME: ${POSTGRES_DB:?POSTGRES_DB is required}
+      DB_USER: heymail_app
+      DB_PASSWORD_FILE: /run/secrets/postgres_app_password
+
+    secrets:
+      - app_secret
+      - postgres_app_password
+
+    networks:
+      - data_net
+
+    depends_on:
+      database:
+        condition: service_healthy
+
+      database-bootstrap:
+        condition: service_completed_successfully
+
+    read_only: true
+
+    tmpfs:
+      - /tmp:size=32m,mode=1777
+      - /app/var:size=64m,mode=0770,uid=${HEYMAIL_UID},gid=${HEYMAIL_GID}
+
+    security_opt:
+      - no-new-privileges:true
+
+    cap_drop:
+      - ALL
+
+    pids_limit: 100
+    mem_limit: 384m
+    cpus: 0.50
+
+    command:
+      - php
+      - bin/console
+      - messenger:consume
+      - outbound
+      - --time-limit=3600
+      - --memory-limit=192M
+      - --sleep=1000
+      - --no-interaction
+
+    stop_grace_period: 30s
+
+
+  # =========================================================================
   # Doctrine database migrations
   #
   # Short-lived service using the restricted migration role.
