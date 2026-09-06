@@ -33,6 +33,14 @@ RUN set -eux; \
     postconf -e 'smtp_host_lookup = native'; \
     postconf -e 'smtp_tls_security_level = none'; \
     \
+    postconf -e 'non_smtpd_milters = inet:rspamd:11332'; \
+    postconf -e 'smtpd_milters ='; \
+    postconf -e 'milter_default_action = tempfail'; \
+    postconf -e 'milter_protocol = 6'; \
+    postconf -e 'milter_connect_timeout = 5s'; \
+    postconf -e 'milter_command_timeout = 5s'; \
+    postconf -e 'milter_content_timeout = 10s'; \
+    \
     postconf -e 'queue_run_delay = 5s'; \
     postconf -e 'minimal_backoff_time = 5s'; \
     postconf -e 'maximal_backoff_time = 30s'; \

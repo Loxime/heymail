@@ -1,4 +1,4 @@
-filters = "";
+filters = "dkim";
 explicit_modules = [];
 
 disable_hyperscan = true;

@@ -211,8 +211,12 @@ services:
 
     networks:
       - smtp_lab_net
+      - filter_net
 
     depends_on:
+      rspamd:
+        condition: service_healthy
+
       fake-mx-success:
         condition: service_healthy
 
@@ -270,6 +274,7 @@ services:
 
     environment:
       FAKE_MX_MODE: success
+      FAKE_MX_CAPTURE_DIR: /capture
 
     networks:
       - smtp_lab_net
@@ -281,6 +286,7 @@ services:
 
     tmpfs:
       - /tmp:size=8m,mode=1777
+      - /capture:size=8m,uid=10001,gid=10001,mode=0700
 
     security_opt:
       - no-new-privileges:true
@@ -396,6 +402,51 @@ services:
 
 
   # =========================================================================
+  # Rspamd DKIM key bootstrap
+  # =========================================================================
+
+  rspamd-dkim-bootstrap:
+    build:
+      context: .
+      dockerfile: docker/rspamd/Dockerfile
+
+    image: heymail-rspamd:lab
+
+    restart: "no"
+
+    user: "0:0"
+
+    network_mode: "none"
+
+    read_only: true
+
+    entrypoint:
+      - /usr/local/bin/heymail-rspamd-dkim-bootstrap
+
+    command: []
+
+    volumes:
+      - rspamd_dkim_private:/private
+      - rspamd_dkim_public:/public
+
+    tmpfs:
+      - /tmp:size=8m,mode=0700
+
+    security_opt:
+      - no-new-privileges:true
+
+    cap_drop:
+      - ALL
+
+    cap_add:
+      - CHOWN
+
+    pids_limit: 20
+    mem_limit: 128m
+    cpus: 0.25
+
+
+  # =========================================================================
   # Rspamd filtering laboratory
   # =========================================================================
 
@@ -412,8 +463,15 @@ services:
 
     read_only: true
 
+    depends_on:
+      rspamd-dkim-bootstrap:
+        condition: service_completed_successfully
+
     networks:
       - filter_net
+
+    volumes:
+      - rspamd_dkim_private:/run/heymail-dkim:ro
 
     expose:
       - "11332"
@@ -445,6 +503,42 @@ services:
 
     stop_grace_period: 15s
 
+
+
+  # =========================================================================
+  # DKIM cryptographic verification laboratory
+  # =========================================================================
+
+  dkim-verifier:
+    build:
+      context: .
+      dockerfile: docker/dkim-verifier/Dockerfile
+
+    image: heymail-dkim-verifier:lab
+
+    restart: "no"
+
+    user: "10002:10002"
+
+    network_mode: "none"
+
+    read_only: true
+
+    environment:
+      PYTHONDONTWRITEBYTECODE: "1"
+
+    volumes:
+      - rspamd_dkim_public:/public:ro
+
+    security_opt:
+      - no-new-privileges:true
+
+    cap_drop:
+      - ALL
+
+    pids_limit: 20
+    mem_limit: 128m
+    cpus: 0.25
 
 networks:
 
@@ -483,6 +577,12 @@ volumes:
 
   postfix_data:
     name: heymail_postfix_data
+
+  rspamd_dkim_private:
+    name: heymail_rspamd_dkim_private
+
+  rspamd_dkim_public:
+    name: heymail_rspamd_dkim_public
 
 
 secrets:
