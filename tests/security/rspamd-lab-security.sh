@@ -317,8 +317,8 @@ OPTIONS="$(
 )"
 
 printf '%s\n' "$OPTIONS" \
-    | grep  'filters = "";' >/dev/null \
-    || fail "Rspamd default C filters remain enabled"
+    | grep  'filters = "dkim";' >/dev/null \
+    || fail "Rspamd DKIM core filter policy is not enforced"
 
 printf '%s\n' "$OPTIONS" \
     | grep  'nameserver = "127.0.0.1";' >/dev/null \
@@ -473,11 +473,11 @@ pass "Rspamd legacy Hyperscan cache regression is absent"
 
 
 docker exec "$RSPAMD_CONTAINER" \
-    grep -qx 'enabled = false;' \
+    grep -qx 'enabled = true;' \
         /etc/rspamd/override.d/dkim_signing.conf \
-    || fail "DKIM signing is enabled before key provisioning"
+    || fail "DKIM signing override is not enabled"
 
-pass "DKIM signing remains disabled"
+pass "DKIM signing is explicitly enabled"
 
 
 RSPAMD_LOGS="$(

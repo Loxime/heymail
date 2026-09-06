@@ -18,8 +18,14 @@ COPY docker/rspamd/statistic.conf \
 COPY docker/rspamd/healthcheck.sh \
     /usr/local/bin/heymail-rspamd-healthcheck
 
+COPY docker/rspamd/dkim-bootstrap.sh \
+    /usr/local/bin/heymail-rspamd-dkim-bootstrap
+
 RUN set -eux; \
+    mkdir -p /run/heymail-dkim; \
+    chmod 0555 /run/heymail-dkim; \
     chmod 0555 /usr/local/bin/heymail-rspamd-healthcheck; \
+    chmod 0555 /usr/local/bin/heymail-rspamd-dkim-bootstrap; \
     rspamadm configtest
 
 USER 100:101

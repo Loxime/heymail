@@ -396,6 +396,51 @@ services:
 
 
   # =========================================================================
+  # Rspamd DKIM key bootstrap
+  # =========================================================================
+
+  rspamd-dkim-bootstrap:
+    build:
+      context: .
+      dockerfile: docker/rspamd/Dockerfile
+
+    image: heymail-rspamd:lab
+
+    restart: "no"
+
+    user: "0:0"
+
+    network_mode: "none"
+
+    read_only: true
+
+    entrypoint:
+      - /usr/local/bin/heymail-rspamd-dkim-bootstrap
+
+    command: []
+
+    volumes:
+      - rspamd_dkim_private:/private
+      - rspamd_dkim_public:/public
+
+    tmpfs:
+      - /tmp:size=8m,mode=0700
+
+    security_opt:
+      - no-new-privileges:true
+
+    cap_drop:
+      - ALL
+
+    cap_add:
+      - CHOWN
+
+    pids_limit: 20
+    mem_limit: 128m
+    cpus: 0.25
+
+
+  # =========================================================================
   # Rspamd filtering laboratory
   # =========================================================================
 
@@ -412,8 +457,15 @@ services:
 
     read_only: true
 
+    depends_on:
+      rspamd-dkim-bootstrap:
+        condition: service_completed_successfully
+
     networks:
       - filter_net
+
+    volumes:
+      - rspamd_dkim_private:/run/heymail-dkim:ro
 
     expose:
       - "11332"
@@ -483,6 +535,12 @@ volumes:
 
   postfix_data:
     name: heymail_postfix_data
+
+  rspamd_dkim_private:
+    name: heymail_rspamd_dkim_private
+
+  rspamd_dkim_public:
+    name: heymail_rspamd_dkim_public
 
 
 secrets:
