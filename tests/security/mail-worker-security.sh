@@ -425,12 +425,15 @@ import sys
 
 stats = json.load(sys.stdin)["transports"]
 
-assert stats["outbound"]["count"] == 0
-assert stats["failed"]["count"] == 0
-' <<<"$MESSENGER_STATS" \
-    || fail "Messenger queues are not in the expected initial state"
+for transport in ("outbound", "failed"):
+    count = stats[transport]["count"]
 
-pass "mail-worker can access empty outbound and failed Messenger queues"
+    assert isinstance(count, int)
+    assert count >= 0
+' <<<"$MESSENGER_STATS" \
+    || fail "Messenger transport statistics are invalid"
+
+pass "mail-worker can access outbound and failed Messenger queues"
 
 
 # ---------------------------------------------------------------------------

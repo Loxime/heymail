@@ -2,9 +2,16 @@ framework:
     messenger:
         failure_transport: failed
 
+        serializer:
+            default_serializer: messenger.transport.symfony_serializer
+            symfony_serializer:
+                format: json
+                context: { }
+
         transports:
             outbound:
                 dsn: 'doctrine://default'
+                serializer: messenger.transport.symfony_serializer
                 options:
                     table_name: messenger_messages
                     queue_name: outbound
@@ -18,6 +25,7 @@ framework:
 
             failed:
                 dsn: 'doctrine://default'
+                serializer: messenger.transport.symfony_serializer
                 options:
                     table_name: messenger_messages
                     queue_name: failed
