@@ -480,6 +480,25 @@ docker exec "$RSPAMD_CONTAINER" \
 pass "DKIM signing is explicitly enabled"
 
 
+FORCE_ACTIONS="$(
+    docker compose exec -T rspamd         rspamadm configdump force_actions         2>/dev/null
+)"
+
+grep -F     'REQUIRE_DKIM_SIGNATURE'     <<<"$FORCE_ACTIONS"     >/dev/null     || fail "DKIM signing enforcement rule is missing"
+
+grep -F     'expression = "!DKIM_SIGNED";'     <<<"$FORCE_ACTIONS"     >/dev/null     || fail "DKIM enforcement does not require DKIM_SIGNED"
+
+grep -F     'action = "soft reject";'     <<<"$FORCE_ACTIONS"     >/dev/null     || fail "unsigned messages are not fail-closed"
+
+DKIM_SIGNING_CONFIG="$(
+    docker compose exec -T rspamd         rspamadm configdump dkim_signing         2>/dev/null
+)"
+
+grep -F     'allow_envfrom_empty = true;'     <<<"$DKIM_SIGNING_CONFIG"     >/dev/null     || fail "null reverse-path DKIM signing is not enabled"
+
+pass "Rspamd enforces DKIM signing fail-closed"
+
+
 RSPAMD_LOGS="$(
     docker logs "$RSPAMD_CONTAINER" 2>&1
 )"

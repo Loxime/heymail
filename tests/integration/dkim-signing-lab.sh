@@ -418,5 +418,164 @@ verify_capture \
 pass "post-outage delivery is cryptographically DKIM signed"
 
 
+# ---------------------------------------------------------------------------
+# Signing-policy enforcement
+# ---------------------------------------------------------------------------
+
+echo
+echo "=== DKIM signing-policy enforcement ==="
+
+
+# A legitimate null reverse-path must still receive a valid DKIM signature.
+docker compose exec -T postfix \
+    postsuper -d ALL \
+    >/dev/null 2>&1 \
+    || true
+
+clear_capture
+
+NULL_RUN_ID="null-${RUN_ID}"
+NULL_RECIPIENT="dkim-${NULL_RUN_ID}@success.test"
+NULL_MARKER="HEYMAIL-NULL-${NULL_RUN_ID}"
+
+timeout 20s \
+    docker compose exec -T postfix \
+    /usr/sbin/sendmail \
+    -f '<>' \
+    -- "$NULL_RECIPIENT" <<MAIL
+From: lab@heymail.test
+To: ${NULL_RECIPIENT}
+Subject: HeyMail null-envelope signing test
+
+${NULL_MARKER}
+MAIL
+
+wait_for_capture "$NULL_MARKER" \
+    || fail "null-envelope message was not delivered"
+
+docker compose exec -T fake-mx-success \
+    grep -aE \
+        '^DKIM-Signature: .*a=rsa-sha256;' \
+        /capture/last.eml \
+    >/dev/null \
+    || fail "null-envelope message escaped without rsa-sha256 DKIM"
+
+verify_capture \
+    || fail "null-envelope message has invalid DKIM signature"
+
+pass "null-envelope message is delivered with valid rsa-sha256 DKIM"
+
+
+# A header/envelope domain mismatch must never reach the MX unsigned.
+docker compose exec -T postfix \
+    postsuper -d ALL \
+    >/dev/null 2>&1 \
+    || true
+
+clear_capture
+
+MISMATCH_RUN_ID="mismatch-${RUN_ID}"
+MISMATCH_RECIPIENT="dkim-${MISMATCH_RUN_ID}@success.test"
+MISMATCH_MARKER="HEYMAIL-MISMATCH-${MISMATCH_RUN_ID}"
+
+if timeout 20s \
+    docker compose exec -T postfix \
+    /usr/sbin/sendmail \
+    -f 'lab@heymail.test' \
+    -- "$MISMATCH_RECIPIENT" <<MAIL
+From: attacker@other.test
+To: ${MISMATCH_RECIPIENT}
+Subject: HeyMail mismatch enforcement test
+
+${MISMATCH_MARKER}
+MAIL
+then
+    MISMATCH_STATUS=0
+else
+    MISMATCH_STATUS=$?
+fi
+
+sleep 7
+
+if capture_contains "$MISMATCH_MARKER"; then
+    fail "mismatched From message reached fake MX"
+fi
+
+if queue_contains "$MISMATCH_RECIPIENT"; then
+    pass "mismatched From message is fail-closed in Postfix queue"
+elif [ "$MISMATCH_STATUS" -ne 0 ]; then
+    pass "mismatched From message was rejected during submission"
+else
+    fail "mismatched message vanished without delivery, queueing or rejection"
+fi
+
+
+# Multiple From headers must also never escape unsigned.
+docker compose exec -T postfix \
+    postsuper -d ALL \
+    >/dev/null 2>&1 \
+    || true
+
+clear_capture
+
+MULTI_RUN_ID="multi-from-${RUN_ID}"
+MULTI_RECIPIENT="dkim-${MULTI_RUN_ID}@success.test"
+MULTI_MARKER="HEYMAIL-MULTIFROM-${MULTI_RUN_ID}"
+
+if timeout 20s \
+    docker compose exec -T postfix \
+    /usr/sbin/sendmail \
+    -f 'lab@heymail.test' \
+    -- "$MULTI_RECIPIENT" <<MAIL
+From: lab@heymail.test
+From: attacker@other.test
+To: ${MULTI_RECIPIENT}
+Subject: HeyMail multiple-From enforcement test
+
+${MULTI_MARKER}
+MAIL
+then
+    MULTI_STATUS=0
+else
+    MULTI_STATUS=$?
+fi
+
+sleep 7
+
+if capture_contains "$MULTI_MARKER"; then
+    fail "multiple-From message reached fake MX"
+fi
+
+if queue_contains "$MULTI_RECIPIENT"; then
+    pass "multiple-From message is fail-closed in Postfix queue"
+elif [ "$MULTI_STATUS" -ne 0 ]; then
+    pass "multiple-From message was rejected during submission"
+else
+    fail "multiple-From message vanished without delivery, queueing or rejection"
+fi
+
+
+# Leave the laboratory clean.
+docker compose exec -T postfix \
+    postsuper -d ALL \
+    >/dev/null 2>&1 \
+    || true
+
+clear_capture
+
+FINAL_QUEUE="$(
+    docker compose exec -T postfix \
+        postqueue -p
+)"
+
+grep -F \
+    'Mail queue is empty' \
+    <<<"$FINAL_QUEUE" \
+    >/dev/null \
+    || fail "Postfix queue is not empty after DKIM policy tests"
+
+pass "DKIM signing-policy enforcement is fail-closed"
+
+
 echo
 echo "ALL DKIM SIGNING INTEGRATION TESTS PASSED"
