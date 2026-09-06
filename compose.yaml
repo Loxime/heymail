@@ -195,6 +195,76 @@ services:
 
 
   # =========================================================================
+  # Doctrine database migrations
+  #
+  # Short-lived service using the restricted migration role.
+  # =========================================================================
+
+  database-migrate:
+    build:
+      context: .
+      dockerfile: docker/php/Dockerfile
+      args:
+        HEYMAIL_UID: ${HEYMAIL_UID:?HEYMAIL_UID is required}
+        HEYMAIL_GID: ${HEYMAIL_GID:?HEYMAIL_GID is required}
+
+    image: heymail-api:local
+
+    restart: "no"
+
+    user: "${HEYMAIL_UID:?HEYMAIL_UID is required}:${HEYMAIL_GID:?HEYMAIL_GID is required}"
+
+    environment:
+      APP_ENV: prod
+      APP_DEBUG: "0"
+      APP_RUNTIME_OPTIONS: '{"disable_dotenv":true}'
+      APP_SECRET_FILE: /run/secrets/app_secret
+
+      DB_HOST: database
+      DB_PORT: "5432"
+      DB_NAME: ${POSTGRES_DB:?POSTGRES_DB is required}
+      DB_USER: heymail_migrator
+      DB_PASSWORD_FILE: /run/secrets/postgres_migrator_password
+
+    secrets:
+      - app_secret
+      - postgres_migrator_password
+
+    networks:
+      - data_net
+
+    depends_on:
+      database:
+        condition: service_healthy
+
+      database-bootstrap:
+        condition: service_completed_successfully
+
+    read_only: true
+
+    tmpfs:
+      - /tmp:size=32m,mode=1777
+      - /app/var:size=64m,mode=0770,uid=${HEYMAIL_UID},gid=${HEYMAIL_GID}
+
+    security_opt:
+      - no-new-privileges:true
+
+    cap_drop:
+      - ALL
+
+    pids_limit: 100
+    mem_limit: 384m
+    cpus: 0.50
+
+    entrypoint:
+      - php
+      - bin/console
+      - doctrine:migrations:migrate
+      - --no-interaction
+      - --allow-no-migration
+
+
+  # =========================================================================
   # Postfix SMTP laboratory
   # =========================================================================
 
