@@ -8,6 +8,9 @@ framework:
                 format: json
                 context: { }
 
+        routing:
+            'App\Message\SendOutboundEmail': outbound
+
         transports:
             outbound:
                 dsn: 'doctrine://default'

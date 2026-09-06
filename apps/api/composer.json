@@ -17,8 +17,11 @@
         "symfony/flex": "^2",
         "symfony/framework-bundle": "7.4.*",
         "symfony/messenger": "7.4.*",
+        "symfony/property-access": "7.4.*",
+        "symfony/property-info": "7.4.*",
         "symfony/runtime": "7.4.*",
         "symfony/serializer": "7.4.*",
+        "symfony/type-info": "7.4.*",
         "symfony/yaml": "7.4.*"
     },
     "config": {
