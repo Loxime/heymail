@@ -1,0 +1,94 @@
+# syntax=docker/dockerfile:1
+
+# ============================================================================
+# Composer binary
+# ============================================================================
+
+FROM composer:2.10.3@sha256:4d045ea9f71d5d111a95e608400da61d187e487adf9eaf2dfe068998a8d4f584 AS composer-bin
+
+
+# ============================================================================
+# PHP test runtime
+# ============================================================================
+
+FROM php:8.4.25-fpm-alpine3.23@sha256:097775b7be0425db43dd2eb0879a723d184b47adabac2c47110338a1bee21da0
+
+ARG HEYMAIL_UID=1000
+ARG HEYMAIL_GID=1000
+
+ENV COMPOSER_ALLOW_SUPERUSER=1 \
+    APP_ENV=test \
+    APP_DEBUG=0
+
+RUN set -eux; \
+    addgroup \
+        -g "${HEYMAIL_GID}" \
+        -S \
+        heymail; \
+    adduser \
+        -u "${HEYMAIL_UID}" \
+        -S \
+        -D \
+        -G heymail \
+        heymail; \
+    apk add --no-cache \
+        libpq \
+        libxml2 \
+        oniguruma; \
+    apk add --no-cache \
+        --virtual .build-deps \
+        ${PHPIZE_DEPS} \
+        libxml2-dev \
+        oniguruma-dev \
+        postgresql-dev; \
+    docker-php-ext-install \
+        -j"$(nproc)" \
+        dom \
+        mbstring \
+        pdo_pgsql \
+        xml \
+        xmlwriter; \
+    apk del .build-deps
+
+COPY --from=composer-bin \
+    /usr/bin/composer \
+    /usr/local/bin/composer
+
+WORKDIR /app
+
+COPY apps/api/composer.json \
+     apps/api/composer.lock \
+     apps/api/symfony.lock \
+     ./
+
+RUN composer install \
+    --prefer-dist \
+    --no-interaction \
+    --no-progress \
+    --no-scripts \
+    --no-plugins \
+    --no-autoloader
+
+COPY apps/api/ /app/
+
+RUN set -eux; \
+    composer dump-autoload \
+        --classmap-authoritative \
+        --no-interaction \
+        --no-scripts \
+        --no-plugins; \
+    php -v; \
+    php vendor/bin/phpunit --version; \
+    mkdir -p \
+        /app/.phpunit.cache \
+        /app/var; \
+    chown -R \
+        heymail:heymail \
+        /app/.phpunit.cache \
+        /app/var
+
+USER heymail:heymail
+
+ENTRYPOINT ["php"]
+
+CMD ["vendor/bin/phpunit"]
