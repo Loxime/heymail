@@ -23,5 +23,12 @@ services:
         arguments:
             $payloadKekFile: '%env(string:PAYLOAD_KEK_FILE)%'
 
+    App\Mail\SymfonyMailerOutboundMessageSubmitter:
+        arguments:
+            $bounceDomain: '%env(string:HEYMAIL_BOUNCE_DOMAIN)%'
+
+    App\Mail\OutboundMessageSubmitter:
+        alias: App\Mail\SymfonyMailerOutboundMessageSubmitter
+
     # add more service definitions when explicit configuration is needed
     # please note that last definitions always *replace* previous ones

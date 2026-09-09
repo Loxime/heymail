@@ -274,6 +274,18 @@ grep -Fxq \
     <<<"$ENV_DUMP" \
     || fail "PAYLOAD_KEK_FILE path is missing"
 
+grep -Fxq \
+    'MAILER_DSN=null://null' \
+    <<<"$ENV_DUMP" \
+    || fail "API Mailer transport is not disabled"
+
+grep -Fxq \
+    'HEYMAIL_BOUNCE_DOMAIN=heymail.test' \
+    <<<"$ENV_DUMP" \
+    || fail "API bounce-domain policy is missing"
+
+pass "API Mailer transport is explicitly disabled"
+
 pass "environment contains secret paths rather than secret values"
 
 # Ensure known secret values themselves did not leak to the runtime

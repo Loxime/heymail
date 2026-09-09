@@ -142,6 +142,8 @@ services:
       APP_DEBUG: "0"
       APP_RUNTIME_OPTIONS: '{"disable_dotenv":true}'
       APP_SECRET_FILE: /run/secrets/app_secret
+      MAILER_DSN: "null://null"
+      HEYMAIL_BOUNCE_DOMAIN: "heymail.test"
       PAYLOAD_KEK_FILE: /run/secrets/payload_kek_v1
 
       DB_HOST: database
@@ -222,6 +224,8 @@ services:
       APP_DEBUG: "0"
       APP_RUNTIME_OPTIONS: '{"disable_dotenv":true}'
       APP_SECRET_FILE: /run/secrets/app_secret
+      MAILER_DSN: "smtp://postfix-mail:10025"
+      HEYMAIL_BOUNCE_DOMAIN: "heymail.test"
       PAYLOAD_KEK_FILE: /run/secrets/payload_kek_v1
 
       DB_HOST: database
@@ -300,6 +304,8 @@ services:
       APP_DEBUG: "0"
       APP_RUNTIME_OPTIONS: '{"disable_dotenv":true}'
       APP_SECRET_FILE: /run/secrets/app_secret
+      MAILER_DSN: "null://null"
+      HEYMAIL_BOUNCE_DOMAIN: "heymail.test"
 
       DB_HOST: database
       DB_PORT: "5432"

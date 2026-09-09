@@ -86,6 +86,14 @@ assert secrets == {
 
 environment = worker["environment"]
 
+assert environment["MAILER_DSN"] == (
+    "smtp://postfix-mail:10025"
+)
+
+assert environment["HEYMAIL_BOUNCE_DOMAIN"] == (
+    "heymail.test"
+)
+
 assert environment["DB_USER"] == "heymail_app"
 assert environment["DB_PASSWORD_FILE"] == (
     "/run/secrets/postgres_app_password"
