@@ -246,6 +246,7 @@ set -eu
 
 test -r /run/secrets/app_secret
 test -r /run/secrets/postgres_app_password
+test -r /run/secrets/payload_kek_v1
 
 test ! -e /run/secrets/postgres_password
 test ! -e /run/secrets/postgres_migrator_password
@@ -268,6 +269,11 @@ grep -Fxq \
     <<<"$ENV_DUMP" \
     || fail "DB_PASSWORD_FILE path is missing"
 
+grep -Fxq \
+    'PAYLOAD_KEK_FILE=/run/secrets/payload_kek_v1' \
+    <<<"$ENV_DUMP" \
+    || fail "PAYLOAD_KEK_FILE path is missing"
+
 pass "environment contains secret paths rather than secret values"
 
 # Ensure known secret values themselves did not leak to the runtime
@@ -282,6 +288,7 @@ IMAGE_HISTORY="$(
 for SECRET_FILE in \
     secrets/app_secret \
     secrets/postgres_app_password \
+    secrets/payload_kek_v1 \
     secrets/postgres_password \
     secrets/postgres_migrator_password
 do

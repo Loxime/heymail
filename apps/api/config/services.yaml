@@ -19,5 +19,9 @@ services:
     App\:
         resource: '../src/'
 
+    App\Mail\OutboundEmailPayloadCipher:
+        arguments:
+            $payloadKekFile: '%env(string:PAYLOAD_KEK_FILE)%'
+
     # add more service definitions when explicit configuration is needed
     # please note that last definitions always *replace* previous ones

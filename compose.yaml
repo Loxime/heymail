@@ -142,6 +142,7 @@ services:
       APP_DEBUG: "0"
       APP_RUNTIME_OPTIONS: '{"disable_dotenv":true}'
       APP_SECRET_FILE: /run/secrets/app_secret
+      PAYLOAD_KEK_FILE: /run/secrets/payload_kek_v1
 
       DB_HOST: database
       DB_PORT: "5432"
@@ -152,6 +153,7 @@ services:
     secrets:
       - app_secret
       - postgres_app_password
+      - payload_kek_v1
 
     networks:
       - data_net
@@ -220,6 +222,7 @@ services:
       APP_DEBUG: "0"
       APP_RUNTIME_OPTIONS: '{"disable_dotenv":true}'
       APP_SECRET_FILE: /run/secrets/app_secret
+      PAYLOAD_KEK_FILE: /run/secrets/payload_kek_v1
 
       DB_HOST: database
       DB_PORT: "5432"
@@ -230,6 +233,7 @@ services:
     secrets:
       - app_secret
       - postgres_app_password
+      - payload_kek_v1
 
     networks:
       - data_net
@@ -748,3 +752,6 @@ secrets:
 
   app_secret:
     file: ./secrets/app_secret
+
+  payload_kek_v1:
+    file: ./secrets/payload_kek_v1

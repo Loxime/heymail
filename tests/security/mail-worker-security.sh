@@ -81,6 +81,7 @@ secrets = {
 assert secrets == {
     "app_secret",
     "postgres_app_password",
+    "payload_kek_v1",
 }
 
 environment = worker["environment"]
@@ -704,6 +705,7 @@ set -eu
 
 test -r /run/secrets/app_secret
 test -r /run/secrets/postgres_app_password
+test -r /run/secrets/payload_kek_v1
 
 test ! -e /run/secrets/postgres_password
 test ! -e /run/secrets/postgres_migrator_password
@@ -725,6 +727,11 @@ grep -Fxq \
     'DB_PASSWORD_FILE=/run/secrets/postgres_app_password' \
     <<<"$ENV_DUMP" \
     || fail "DB password secret path is missing"
+
+grep -Fxq \
+    'PAYLOAD_KEK_FILE=/run/secrets/payload_kek_v1' \
+    <<<"$ENV_DUMP" \
+    || fail "payload KEK secret path is missing"
 
 pass "mail-worker environment contains secret paths, not passwords"
 
