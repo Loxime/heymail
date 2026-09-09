@@ -198,7 +198,7 @@ services:
   # Outbound mail worker
   #
   # Consumes the Doctrine Messenger outbound queue.
-  # At this stage it has database access only: no Postfix/mail network access.
+  # It reaches Postfix only through the isolated internal mail network.
   # =========================================================================
 
   mail-worker:
@@ -357,9 +357,11 @@ services:
     read_only: true
 
     networks:
-      - smtp_lab_net
-      - filter_net
-      - mail_net
+      smtp_lab_net:
+      filter_net:
+      mail_net:
+        aliases:
+          - postfix-mail
 
     depends_on:
       rspamd:

@@ -31,6 +31,7 @@ import sys
 
 config = json.load(sys.stdin)
 worker = config["services"]["mail-worker"]
+postfix = config["services"]["postfix"]
 
 assert worker["read_only"] is True
 assert worker.get("privileged", False) is False
@@ -45,7 +46,31 @@ assert set(worker.get("networks") or []) == {
     "mail_net",
 }
 
+assert set(postfix.get("networks") or []) == {
+    "smtp_lab_net",
+    "filter_net",
+    "mail_net",
+}
+
+mail_network = postfix["networks"]["mail_net"]
+
+assert set(mail_network.get("aliases") or []) == {
+    "postfix-mail",
+}
+
+mail_services = {
+    name
+    for name, service in config["services"].items()
+    if "mail_net" in (service.get("networks") or {})
+}
+
+assert mail_services == {
+    "mail-worker",
+    "postfix",
+}
+
 assert not worker.get("ports")
+assert not postfix.get("ports")
 assert not worker.get("expose")
 
 secrets = {
@@ -339,31 +364,293 @@ POSTFIX_IP="$(
 pass "postfix is reachable through mail_net DNS ($POSTFIX_IP)"
 
 
-for PORT in 25 10025
-do
+docker compose exec -T mail-worker \
+    php -r '
+        $errno = 0;
+        $error = "";
+
+        $socket = @fsockopen(
+            "postfix",
+            25,
+            $errno,
+            $error,
+            1.0,
+        );
+
+        if (is_resource($socket)) {
+            fclose($socket);
+            exit(1);
+        }
+    ' \
+    || fail "Postfix unexpectedly accepts SMTP on port 25"
+
+pass "standard SMTP port 25 remains closed"
+
+
+SUBMISSION_BANNER="$(
     docker compose exec -T mail-worker \
         php -r '
-            $port = (int) $argv[1];
             $errno = 0;
             $error = "";
 
             $socket = @fsockopen(
-                "postfix",
-                $port,
+                "postfix-mail",
+                10025,
                 $errno,
                 $error,
-                1.0,
+                2.0,
             );
 
-            if (is_resource($socket)) {
-                fclose($socket);
+            if (!is_resource($socket)) {
+                fwrite(
+                    STDERR,
+                    sprintf(
+                        "connect failed: %d %s\n",
+                        $errno,
+                        $error,
+                    ),
+                );
+
                 exit(1);
             }
-        ' "$PORT" \
-        || fail "Postfix unexpectedly accepts TCP on port $PORT"
+
+            stream_set_timeout($socket, 2);
+
+            $banner = fgets($socket);
+
+            fclose($socket);
+
+            if (
+                !is_string($banner)
+                || !str_starts_with($banner, "220 ")
+            ) {
+                exit(1);
+            }
+
+            echo trim($banner);
+        '
+)" || fail "internal Postfix submission listener is unavailable"
+
+pass "internal SMTP submission listener answered: $SUBMISSION_BANNER"
+
+
+POSTFIX_CONTAINER="$(
+    docker compose ps -q postfix
+)"
+
+[ -n "$POSTFIX_CONTAINER" ] \
+    || fail "Postfix container does not exist"
+
+POSTFIX_MAIL_IP="$(
+    docker inspect "$POSTFIX_CONTAINER" \
+        | python3 -c '
+import json
+import sys
+
+data = json.load(sys.stdin)[0]
+
+print(
+    data["NetworkSettings"]["Networks"]
+        ["heymail_mail"]["IPAddress"]
+)
+'
+)"
+
+[ -n "$POSTFIX_MAIL_IP" ] \
+    || fail "Postfix has no heymail_mail address"
+
+BOUND_10025="$(
+    docker compose exec -T postfix \
+        cat /proc/net/tcp \
+        | python3 -c '
+import socket
+import sys
+
+listeners = set()
+
+for line in sys.stdin:
+    fields = line.split()
+
+    if len(fields) < 4:
+        continue
+
+    local = fields[1]
+    state = fields[3]
+
+    if state != "0A":
+        continue
+
+    address_hex, port_hex = local.split(":", 1)
+
+    if int(port_hex, 16) != 10025:
+        continue
+
+    raw = bytes.fromhex(address_hex)
+
+    listeners.add(
+        socket.inet_ntoa(raw[::-1])
+    )
+
+for listener in sorted(listeners):
+    print(listener)
+'
+)"
+
+[ "$BOUND_10025" = "$POSTFIX_MAIL_IP" ] \
+    || fail \
+        "submission listener bind mismatch: expected $POSTFIX_MAIL_IP, got ${BOUND_10025:-none}"
+
+pass "port 10025 is bound only to the Postfix mail_net address"
+
+
+RELAY_POLICY="$(
+    docker compose exec -T postfix \
+        postconf -P \
+        'postfix-mail:10025/inet/smtpd_relay_restrictions'
+)"
+
+grep -Fq \
+    ' = $heymail_submission_relay_restrictions' \
+    <<<"$RELAY_POLICY" \
+    || fail "submission listener does not use dedicated relay policy"
+
+RELAY_RESTRICTIONS="$(
+    docker compose exec -T postfix \
+        postconf \
+        heymail_submission_relay_restrictions
+)"
+
+grep -Fq \
+    'check_recipient_access pcre:/etc/postfix/submission-recipient-access.pcre, reject' \
+    <<<"$RELAY_RESTRICTIONS" \
+    || fail "submission relay restriction chain is unsafe"
+
+for RECIPIENT in \
+    probe@success.test \
+    probe@tempfail.test \
+    probe@permfail.test
+do
+    RESULT="$(
+        docker compose exec -T postfix \
+            postmap -q \
+            "$RECIPIENT" \
+            pcre:/etc/postfix/submission-recipient-access.pcre
+    )"
+
+    [ "$RESULT" = "PERMIT" ] \
+        || fail "laboratory recipient is not permitted: $RECIPIENT"
 done
 
-pass "Postfix network path exists but SMTP listeners remain closed"
+BLOCKED_RESULT=""
+
+if BLOCKED_RESULT="$(
+    docker compose exec -T postfix \
+        postmap -q \
+        blocked@example.com \
+        pcre:/etc/postfix/submission-recipient-access.pcre
+)"; then
+    :
+else
+    STATUS=$?
+
+    [ "$STATUS" -eq 1 ] \
+        || fail "submission recipient lookup failed ($STATUS)"
+fi
+
+[ -z "$BLOCKED_RESULT" ] \
+    || fail "non-laboratory recipient matched submission allowlist"
+
+pass "submission listener permits only SMTP laboratory destinations"
+
+
+RELAY_REJECT_CODE="$(
+    docker compose exec -T mail-worker \
+        php -r '
+            $readResponse = static function ($socket): int {
+                while (($line = fgets($socket)) !== false) {
+                    if (
+                        preg_match(
+                            "/^([0-9]{3})([ -])/",
+                            $line,
+                            $matches,
+                        ) === 1
+                        && $matches[2] === " "
+                    ) {
+                        return (int) $matches[1];
+                    }
+                }
+
+                return 0;
+            };
+
+            $send = static function (
+                $socket,
+                string $command,
+                int $expected,
+            ) use ($readResponse): void {
+                fwrite(
+                    $socket,
+                    $command . "\r\n",
+                );
+
+                if ($readResponse($socket) !== $expected) {
+                    exit(2);
+                }
+            };
+
+            $errno = 0;
+            $error = "";
+
+            $socket = @fsockopen(
+                "postfix-mail",
+                10025,
+                $errno,
+                $error,
+                2.0,
+            );
+
+            if (!is_resource($socket)) {
+                exit(3);
+            }
+
+            stream_set_timeout($socket, 5);
+
+            if ($readResponse($socket) !== 220) {
+                fclose($socket);
+                exit(4);
+            }
+
+            $send(
+                $socket,
+                "EHLO mail-worker.heymail.test",
+                250,
+            );
+
+            $send(
+                $socket,
+                "MAIL FROM:<worker@heymail.test>",
+                250,
+            );
+
+            fwrite(
+                $socket,
+                "RCPT TO:<blocked@example.com>\r\n",
+            );
+
+            $code = $readResponse($socket);
+
+            fwrite($socket, "QUIT\r\n");
+            fclose($socket);
+
+            echo $code;
+        '
+)" || fail "relay rejection probe failed"
+
+grep -Eq '^5[0-9]{2}$' <<<"$RELAY_REJECT_CODE" \
+    || fail \
+        "non-laboratory destination was not rejected: SMTP $RELAY_REJECT_CODE"
+
+pass "submission listener rejects non-laboratory relay destinations"
 
 
 for HOST in \

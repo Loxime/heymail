@@ -1,0 +1,3 @@
+/(^|@)success[.]test$/   PERMIT
+/(^|@)tempfail[.]test$/  PERMIT
+/(^|@)permfail[.]test$/  PERMIT
