@@ -157,6 +157,7 @@ use App\Kernel;
 use App\Mail\EmailAddress;
 use App\Mail\OutboundEmailPayload;
 use App\Mail\OutboundEmailPayloadCipher;
+use App\Mail\IdempotencyConflictException;
 use App\Mail\OutboundMessageSubmissionService;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\Messenger\Envelope;
@@ -278,6 +279,35 @@ if ($first->replayed) {
 if (!$second->replayed) {
     throw new RuntimeException(
         'Second submission was not marked as replay.',
+    );
+}
+
+$conflictDetected = false;
+
+try {
+    $submission->submit(
+        $idempotencyKey,
+        new OutboundEmailPayload(
+            from: new EmailAddress(
+                'sender@heymail.test',
+                'HeyMail',
+            ),
+            to: [
+                new EmailAddress(
+                    'atomic@success.test',
+                ),
+            ],
+            subject: 'Conflicting submission',
+            textPart: 'DIFFERENT-PAYLOAD',
+        ),
+    );
+} catch (IdempotencyConflictException) {
+    $conflictDetected = true;
+}
+
+if (!$conflictDetected) {
+    throw new RuntimeException(
+        'Conflicting idempotent replay was accepted.',
     );
 }
 
@@ -405,6 +435,10 @@ echo 'ROLLBACK_ROWS=',
     $rollbackRows,
     PHP_EOL;
 
+echo 'CONFLICT_REJECTED=',
+    $conflictDetected ? 'yes' : 'no',
+    PHP_EOL;
+
 $kernel->shutdown();
 PHP
 )"
@@ -435,6 +469,12 @@ ROLLBACK_ROWS="$(
         <<<"$OUTPUT"
 )"
 
+CONFLICT_REJECTED="$(
+    awk -F= \
+        '/^CONFLICT_REJECTED=/{print $2}' \
+        <<<"$OUTPUT"
+)"
+
 [[ "$OUTBOUND_ID" =~ ^[1-9][0-9]*$ ]] \
     || fail "invalid outbound id"
 
@@ -447,7 +487,11 @@ ROLLBACK_ROWS="$(
 [ "$ROLLBACK_ROWS" = "0" ] \
     || fail "failed dispatch left database state behind"
 
+[ "$CONFLICT_REJECTED" = "yes" ] \
+    || fail "conflicting idempotency payload was accepted"
+
 pass "same idempotency key produced exactly one message"
+pass "same key with different payload is rejected"
 pass "message, encrypted payload and queue row were created"
 pass "failed dispatch rolled database state back"
 

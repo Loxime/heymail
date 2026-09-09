@@ -76,6 +76,41 @@ SQL,
                     );
                 }
 
+                $storedPayload = $this
+                    ->entityManager
+                    ->getRepository(
+                        OutboundMessagePayload::class,
+                    )
+                    ->findOneBy([
+                        'outboundMessage'
+                            => $existing,
+                    ]);
+
+                if (
+                    !$storedPayload
+                    instanceof OutboundMessagePayload
+                ) {
+                    throw new RuntimeException(
+                        'Existing outbound message has no encrypted payload.',
+                    );
+                }
+
+                $existingPayload =
+                    $this->payloadCipher->decrypt(
+                        $idempotencyHash,
+                        $storedPayload
+                            ->encryptedPayload(),
+                    );
+
+                if (
+                    $existingPayload->toArray()
+                    !== $payload->toArray()
+                ) {
+                    throw new IdempotencyConflictException(
+                        'Idempotency key is already associated with another payload.',
+                    );
+                }
+
                 $connection->commit();
 
                 return new OutboundMessageSubmission(
