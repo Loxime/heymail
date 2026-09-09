@@ -18,7 +18,8 @@ ARG HEYMAIL_GID=1000
 
 ENV COMPOSER_ALLOW_SUPERUSER=1 \
     APP_ENV=test \
-    APP_DEBUG=0
+    APP_DEBUG=0 \
+    DEFAULT_URI=https://api.heymail.test
 
 RUN set -eux; \
     addgroup \

@@ -86,6 +86,10 @@ assert secrets == {
 
 environment = worker["environment"]
 
+assert environment["DEFAULT_URI"] == (
+    "https://api.heymail.test"
+)
+
 assert environment["MAILER_DSN"] == (
     "smtp://postfix-mail:10025"
 )
@@ -717,6 +721,8 @@ test -r /run/secrets/payload_kek_v1
 
 test ! -e /run/secrets/postgres_password
 test ! -e /run/secrets/postgres_migrator_password
+test ! -e /run/secrets/api_key
+test ! -e /run/secrets/api_secret
 ' || fail "mail-worker secret boundary is incorrect"
 
 pass "mail-worker receives only application runtime secrets"

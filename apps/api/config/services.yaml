@@ -30,5 +30,10 @@ services:
     App\Mail\OutboundMessageSubmitter:
         alias: App\Mail\SymfonyMailerOutboundMessageSubmitter
 
+    App\Api\ApiCredentials:
+        arguments:
+            $apiKeyFile: '%env(string:HEYMAIL_API_KEY_FILE)%'
+            $apiSecretFile: '%env(string:HEYMAIL_API_SECRET_FILE)%'
+
     # add more service definitions when explicit configuration is needed
     # please note that last definitions always *replace* previous ones

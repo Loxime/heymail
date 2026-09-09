@@ -247,6 +247,8 @@ set -eu
 test -r /run/secrets/app_secret
 test -r /run/secrets/postgres_app_password
 test -r /run/secrets/payload_kek_v1
+test -r /run/secrets/api_key
+test -r /run/secrets/api_secret
 
 test ! -e /run/secrets/postgres_password
 test ! -e /run/secrets/postgres_migrator_password
@@ -286,6 +288,23 @@ grep -Fxq \
 
 pass "API Mailer transport is explicitly disabled"
 
+grep -Fxq \
+    'HEYMAIL_API_KEY_FILE=/run/secrets/api_key' \
+    <<<"$ENV_DUMP" \
+    || fail "API key secret path is missing"
+
+grep -Fxq \
+    'HEYMAIL_API_SECRET_FILE=/run/secrets/api_secret' \
+    <<<"$ENV_DUMP" \
+    || fail "API secret path is missing"
+
+grep -Fxq \
+    'DEFAULT_URI=https://api.heymail.test' \
+    <<<"$ENV_DUMP" \
+    || fail "canonical HeyMail API URI is missing"
+
+pass "canonical HeyMail API URI is configured"
+
 pass "environment contains secret paths rather than secret values"
 
 # Ensure known secret values themselves did not leak to the runtime
@@ -301,6 +320,8 @@ for SECRET_FILE in \
     secrets/app_secret \
     secrets/postgres_app_password \
     secrets/payload_kek_v1 \
+    secrets/api_key \
+    secrets/api_secret \
     secrets/postgres_password \
     secrets/postgres_migrator_password
 do

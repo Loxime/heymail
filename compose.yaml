@@ -140,11 +140,14 @@ services:
     environment:
       APP_ENV: prod
       APP_DEBUG: "0"
+      DEFAULT_URI: "https://api.heymail.test"
       APP_RUNTIME_OPTIONS: '{"disable_dotenv":true}'
       APP_SECRET_FILE: /run/secrets/app_secret
       MAILER_DSN: "null://null"
       HEYMAIL_BOUNCE_DOMAIN: "heymail.test"
       PAYLOAD_KEK_FILE: /run/secrets/payload_kek_v1
+      HEYMAIL_API_KEY_FILE: /run/secrets/api_key
+      HEYMAIL_API_SECRET_FILE: /run/secrets/api_secret
 
       DB_HOST: database
       DB_PORT: "5432"
@@ -156,6 +159,8 @@ services:
       - app_secret
       - postgres_app_password
       - payload_kek_v1
+      - api_key
+      - api_secret
 
     networks:
       - data_net
@@ -222,6 +227,7 @@ services:
     environment:
       APP_ENV: prod
       APP_DEBUG: "0"
+      DEFAULT_URI: "https://api.heymail.test"
       APP_RUNTIME_OPTIONS: '{"disable_dotenv":true}'
       APP_SECRET_FILE: /run/secrets/app_secret
       MAILER_DSN: "smtp://postfix-mail:10025"
@@ -302,6 +308,7 @@ services:
     environment:
       APP_ENV: prod
       APP_DEBUG: "0"
+      DEFAULT_URI: "https://api.heymail.test"
       APP_RUNTIME_OPTIONS: '{"disable_dotenv":true}'
       APP_SECRET_FILE: /run/secrets/app_secret
       MAILER_DSN: "null://null"
@@ -761,3 +768,9 @@ secrets:
 
   payload_kek_v1:
     file: ./secrets/payload_kek_v1
+
+  api_key:
+    file: ./secrets/api_key
+
+  api_secret:
+    file: ./secrets/api_secret
