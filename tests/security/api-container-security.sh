@@ -217,12 +217,41 @@ pass "Postfix is absent from API network namespace"
 # FPM exposure
 # ---------------------------------------------------------------------------
 
-docker compose exec -T api sh -lc '
-grep -Eq "^[[:space:]]*listen[[:space:]]*=[[:space:]]*127\.0\.0\.1:9000[[:space:]]*$" \
+docker compose exec -T api sh -ec '
+grep -Fxq \
+    "listen = /run/heymail-fpm/heymail.sock" \
     /usr/local/etc/php-fpm.d/zz-heymail.conf
-' || fail "PHP-FPM is not restricted to loopback"
+' || fail "PHP-FPM configuration does not select the HeyMail Unix socket"
 
-pass "PHP-FPM listens only on container loopback"
+pass "PHP-FPM configuration selects the private Unix socket"
+
+docker compose exec -T api \
+    test -S /run/heymail-fpm/heymail.sock \
+    || fail "PHP-FPM Unix socket does not exist at runtime"
+
+pass "PHP-FPM Unix socket exists at runtime"
+
+docker compose exec -T api \
+    php -r '
+        $errno = 0;
+        $error = "";
+
+        $socket = @fsockopen(
+            "127.0.0.1",
+            9000,
+            $errno,
+            $error,
+            1.0,
+        );
+
+        if (is_resource($socket)) {
+            fclose($socket);
+            exit(1);
+        }
+    ' \
+    || fail "PHP-FPM still exposes TCP port 9000"
+
+pass "PHP-FPM exposes no TCP FastCGI listener"
 
 docker compose exec -T api \
     php-fpm -tt >/dev/null 2>&1 \
