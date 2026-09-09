@@ -10,6 +10,7 @@ use DateTimeZone;
 use Doctrine\DBAL\Types\Types;
 use Doctrine\ORM\Mapping as ORM;
 use InvalidArgumentException;
+use LogicException;
 
 #[ORM\Entity]
 #[ORM\Table(name: 'outbound_message')]
@@ -22,7 +23,6 @@ final class OutboundMessage
     #[ORM\Id]
     #[ORM\GeneratedValue]
     #[ORM\Column(type: Types::BIGINT)]
-    // Doctrine assigns the generated identifier after persistence.
     // @phpstan-ignore property.unusedType
     private ?int $id = null;
 
@@ -49,15 +49,26 @@ final class OutboundMessage
     )]
     private ?DateTimeImmutable $readyForSubmissionAt = null;
 
+    #[ORM\Column(
+        type: Types::DATETIME_IMMUTABLE,
+        nullable: true,
+    )]
+    private ?DateTimeImmutable $submittedAt = null;
+
     public function __construct(string $idempotencyKey)
     {
-        $length = strlen($idempotencyKey);
+        $length = strlen(
+            $idempotencyKey,
+        );
 
         if (
             $length === 0
             || $length > 255
             || trim($idempotencyKey) === ''
-            || preg_match('/[\x00-\x1F\x7F]/', $idempotencyKey) === 1
+            || preg_match(
+                '/[\x00-\x1F\x7F]/',
+                $idempotencyKey,
+            ) === 1
         ) {
             throw new InvalidArgumentException(
                 'Invalid outbound message idempotency key.',
@@ -69,12 +80,14 @@ final class OutboundMessage
             $idempotencyKey,
         );
 
-        $this->status = OutboundMessageStatus::QUEUED;
+        $this->status =
+            OutboundMessageStatus::QUEUED;
 
-        $this->createdAt = new DateTimeImmutable(
-            'now',
-            new DateTimeZone('UTC'),
-        );
+        $this->createdAt =
+            new DateTimeImmutable(
+                'now',
+                new DateTimeZone('UTC'),
+            );
     }
 
     public function getId(): ?int
@@ -102,19 +115,56 @@ final class OutboundMessage
         return $this->readyForSubmissionAt;
     }
 
+    public function getSubmittedAt(): ?DateTimeImmutable
+    {
+        return $this->submittedAt;
+    }
+
     public function markReadyForSubmission(
         ?DateTimeImmutable $at = null,
     ): void {
         if (
             $this->status
             === OutboundMessageStatus::READY_FOR_SUBMISSION
+            || $this->status
+            === OutboundMessageStatus::SUBMITTED
         ) {
             return;
         }
 
-        $this->status = OutboundMessageStatus::READY_FOR_SUBMISSION;
+        $this->status =
+            OutboundMessageStatus::READY_FOR_SUBMISSION;
 
         $this->readyForSubmissionAt = $at
+            ?? new DateTimeImmutable(
+                'now',
+                new DateTimeZone('UTC'),
+            );
+    }
+
+    public function markSubmitted(
+        ?DateTimeImmutable $at = null,
+    ): void {
+        if (
+            $this->status
+            === OutboundMessageStatus::SUBMITTED
+        ) {
+            return;
+        }
+
+        if (
+            $this->status
+            !== OutboundMessageStatus::READY_FOR_SUBMISSION
+        ) {
+            throw new LogicException(
+                'Outbound message must be ready before submission.',
+            );
+        }
+
+        $this->status =
+            OutboundMessageStatus::SUBMITTED;
+
+        $this->submittedAt = $at
             ?? new DateTimeImmutable(
                 'now',
                 new DateTimeZone('UTC'),

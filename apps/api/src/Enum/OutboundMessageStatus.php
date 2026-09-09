@@ -8,4 +8,5 @@ enum OutboundMessageStatus: string
 {
     case QUEUED = 'queued';
     case READY_FOR_SUBMISSION = 'ready_for_submission';
+    case SUBMITTED = 'submitted';
 }

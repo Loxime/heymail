@@ -8,6 +8,7 @@ use App\Entity\OutboundMessage;
 use App\Enum\OutboundMessageStatus;
 use DateTimeImmutable;
 use InvalidArgumentException;
+use LogicException;
 use PHPUnit\Framework\TestCase;
 
 final class OutboundMessageTest extends TestCase
@@ -18,10 +19,15 @@ final class OutboundMessageTest extends TestCase
             'request-123',
         );
 
-        self::assertNull($message->getId());
+        self::assertNull(
+            $message->getId(),
+        );
 
         self::assertSame(
-            hash('sha256', 'request-123'),
+            hash(
+                'sha256',
+                'request-123',
+            ),
             $message->getIdempotencyKeyHash(),
         );
 
@@ -32,6 +38,10 @@ final class OutboundMessageTest extends TestCase
 
         self::assertNull(
             $message->getReadyForSubmissionAt(),
+        );
+
+        self::assertNull(
+            $message->getSubmittedAt(),
         );
     }
 
@@ -45,7 +55,10 @@ final class OutboundMessageTest extends TestCase
             '2026-09-06T15:00:00+00:00',
         );
 
-        $message->markReadyForSubmission($at);
+        $message->markReadyForSubmission(
+            $at,
+        );
+
         $message->markReadyForSubmission();
 
         self::assertSame(
@@ -57,6 +70,55 @@ final class OutboundMessageTest extends TestCase
             $at,
             $message->getReadyForSubmissionAt(),
         );
+    }
+
+    public function testSubmittedTransitionIsIdempotent(): void
+    {
+        $message = new OutboundMessage(
+            'request-submitted',
+        );
+
+        $message->markReadyForSubmission();
+
+        $at = new DateTimeImmutable(
+            '2026-09-09T17:30:00+00:00',
+        );
+
+        $message->markSubmitted(
+            $at,
+        );
+
+        $message->markSubmitted();
+
+        self::assertSame(
+            OutboundMessageStatus::SUBMITTED,
+            $message->getStatus(),
+        );
+
+        self::assertSame(
+            $at,
+            $message->getSubmittedAt(),
+        );
+
+        $message->markReadyForSubmission();
+
+        self::assertSame(
+            OutboundMessageStatus::SUBMITTED,
+            $message->getStatus(),
+        );
+    }
+
+    public function testCannotSubmitBeforeReady(): void
+    {
+        $message = new OutboundMessage(
+            'request-invalid-transition',
+        );
+
+        $this->expectException(
+            LogicException::class,
+        );
+
+        $message->markSubmitted();
     }
 
     public function testEmptyIdempotencyKeyIsRejected(): void
