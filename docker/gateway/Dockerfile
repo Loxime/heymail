@@ -28,4 +28,4 @@ USER heymail:heymail
 
 STOPSIGNAL SIGQUIT
 
-CMD ["nginx", "-g", "daemon off;"]
+CMD ["nginx", "-e", "stderr", "-g", "daemon off;"]
