@@ -565,6 +565,85 @@ FINAL_STATUS="$(
 [ "$FINAL_STATUS" = "submission_uncertain" ] \
     || fail "unexpected final state: $FINAL_STATUS"
 
+
+TIMESTAMP_STATE="$(
+    admin_psql \
+        -At \
+        -F '|' \
+        -v target_id="$OUTBOUND_ID" <<'SQL'
+SELECT
+    CASE
+        WHEN submitting_at IS NOT NULL
+        THEN 'submitting-set'
+        ELSE 'submitting-null'
+    END,
+    CASE
+        WHEN submission_uncertain_at IS NOT NULL
+        THEN 'uncertain-set'
+        ELSE 'uncertain-null'
+    END,
+    CASE
+        WHEN submitted_at IS NULL
+        THEN 'submitted-null'
+        ELSE 'submitted-set'
+    END
+FROM outbound_message
+WHERE id = :'target_id';
+SQL
+)"
+
+[ "$TIMESTAMP_STATE" = \
+    "submitting-set|uncertain-set|submitted-null" ] \
+    || fail "unexpected crash lifecycle timestamps: $TIMESTAMP_STATE"
+
+pass "ambiguous lifecycle timestamps are coherent"
+
+STATUS_HEADERS="$TMP_DIR/final-status.headers"
+STATUS_BODY="$TMP_DIR/final-status.body"
+
+curl \
+    --noproxy '*' \
+    --silent \
+    --show-error \
+    --cacert secrets/gateway_tls_cert.pem \
+    --resolve api.heymail.test:8443:127.0.0.1 \
+    --config "$AUTH_CONFIG" \
+    --dump-header "$STATUS_HEADERS" \
+    --output "$STATUS_BODY" \
+    "$API_ORIGIN/api/v1/messages/$OUTBOUND_ID"
+
+[ "$(http_code "$STATUS_HEADERS")" = "200" ] \
+    || fail "final status API request did not return 200"
+
+API_SUBMITTING_AT="$(
+    json_field \
+        submittingAt \
+        "$STATUS_BODY"
+)"
+
+API_UNCERTAIN_AT="$(
+    json_field \
+        submissionUncertainAt \
+        "$STATUS_BODY"
+)"
+
+API_SUBMITTED_AT="$(
+    json_field \
+        submittedAt \
+        "$STATUS_BODY"
+)"
+
+[ "$API_SUBMITTING_AT" != "None" ] \
+    || fail "status API does not expose submittingAt"
+
+[ "$API_UNCERTAIN_AT" != "None" ] \
+    || fail "status API does not expose submissionUncertainAt"
+
+[ "$API_SUBMITTED_AT" = "None" ] \
+    || fail "uncertain message incorrectly exposes submittedAt"
+
+pass "status API exposes ambiguous lifecycle timestamps"
+
 echo
 echo "OUTBOUND_ID=$OUTBOUND_ID"
 echo "SMTP_COPIES=$FINAL_CAPTURE_COUNT"

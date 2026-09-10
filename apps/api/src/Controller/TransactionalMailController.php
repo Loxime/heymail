@@ -237,6 +237,14 @@ final readonly class TransactionalMailController
                 => $message
                     ->getReadyForSubmissionAt()
                     ?->format(DATE_ATOM),
+            'submittingAt'
+                => $message
+                    ->getSubmittingAt()
+                    ?->format(DATE_ATOM),
+            'submissionUncertainAt'
+                => $message
+                    ->getSubmissionUncertainAt()
+                    ?->format(DATE_ATOM),
             'submittedAt'
                 => $message
                     ->getSubmittedAt()

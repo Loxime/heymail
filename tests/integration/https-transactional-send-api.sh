@@ -652,6 +652,35 @@ done
 
 pass "worker moved HTTPS-created message to SUBMITTED"
 
+SUBMITTING_AT="$(
+    json_field \
+        submittingAt \
+        "$FINAL_BODY"
+)"
+
+SUBMISSION_UNCERTAIN_AT="$(
+    json_field \
+        submissionUncertainAt \
+        "$FINAL_BODY"
+)"
+
+SUBMITTED_AT="$(
+    json_field \
+        submittedAt \
+        "$FINAL_BODY"
+)"
+
+[ "$SUBMITTING_AT" != "None" ] \
+    || fail "submitted message does not expose submittingAt"
+
+[ "$SUBMISSION_UNCERTAIN_AT" = "None" ] \
+    || fail "normal submission unexpectedly exposes submissionUncertainAt"
+
+[ "$SUBMITTED_AT" != "None" ] \
+    || fail "submitted message does not expose submittedAt"
+
+pass "normal submission exposes coherent lifecycle timestamps"
+
 # ---------------------------------------------------------------------------
 # Real SMTP laboratory delivery
 # ---------------------------------------------------------------------------
