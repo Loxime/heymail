@@ -154,13 +154,15 @@ final readonly class TransactionalMailController
                 : Response::HTTP_ACCEPTED,
         );
 
-        $response->headers->set(
-            'Location',
-            sprintf(
-                '/api/v1/messages/%d',
-                $submission->messageId,
-            ),
-        );
+        if (!$submission->replayed) {
+            $response->headers->set(
+                'Location',
+                sprintf(
+                    '/api/v1/messages/%d',
+                    $submission->messageId,
+                ),
+            );
+        }
 
         return $response;
     }
