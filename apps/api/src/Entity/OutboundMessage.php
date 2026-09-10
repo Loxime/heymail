@@ -53,6 +53,18 @@ final class OutboundMessage
         type: Types::DATETIME_IMMUTABLE,
         nullable: true,
     )]
+    private ?DateTimeImmutable $submittingAt = null;
+
+    #[ORM\Column(
+        type: Types::DATETIME_IMMUTABLE,
+        nullable: true,
+    )]
+    private ?DateTimeImmutable $submissionUncertainAt = null;
+
+    #[ORM\Column(
+        type: Types::DATETIME_IMMUTABLE,
+        nullable: true,
+    )]
     private ?DateTimeImmutable $submittedAt = null;
 
     public function __construct(string $idempotencyKey)
@@ -115,6 +127,16 @@ final class OutboundMessage
         return $this->readyForSubmissionAt;
     }
 
+    public function getSubmittingAt(): ?DateTimeImmutable
+    {
+        return $this->submittingAt;
+    }
+
+    public function getSubmissionUncertainAt(): ?DateTimeImmutable
+    {
+        return $this->submissionUncertainAt;
+    }
+
     public function getSubmittedAt(): ?DateTimeImmutable
     {
         return $this->submittedAt;
@@ -145,8 +167,9 @@ final class OutboundMessage
      *
      * This transition must be flushed before attempting SMTP.
      */
-    public function markSubmitting(): void
-    {
+    public function markSubmitting(
+        ?DateTimeImmutable $at = null,
+    ): void {
         if (
             $this->status
             === OutboundMessageStatus::SUBMITTING
@@ -165,6 +188,12 @@ final class OutboundMessage
 
         $this->status =
             OutboundMessageStatus::SUBMITTING;
+
+        $this->submittingAt = $at
+            ?? new DateTimeImmutable(
+                'now',
+                new DateTimeZone('UTC'),
+            );
     }
 
     /**
@@ -172,8 +201,9 @@ final class OutboundMessage
      *
      * Automatic SMTP submission must never resume from this state.
      */
-    public function markSubmissionUncertain(): void
-    {
+    public function markSubmissionUncertain(
+        ?DateTimeImmutable $at = null,
+    ): void {
         if (
             $this->status
             === OutboundMessageStatus::SUBMISSION_UNCERTAIN
@@ -192,6 +222,12 @@ final class OutboundMessage
 
         $this->status =
             OutboundMessageStatus::SUBMISSION_UNCERTAIN;
+
+        $this->submissionUncertainAt = $at
+            ?? new DateTimeImmutable(
+                'now',
+                new DateTimeZone('UTC'),
+            );
     }
 
     public function markSubmitted(

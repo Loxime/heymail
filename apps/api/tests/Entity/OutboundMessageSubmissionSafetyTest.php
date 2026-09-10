@@ -6,16 +6,36 @@ namespace App\Tests\Entity;
 
 use App\Entity\OutboundMessage;
 use App\Enum\OutboundMessageStatus;
+use DateTimeImmutable;
+use DateTimeZone;
 use LogicException;
 use PHPUnit\Framework\TestCase;
 
 final class OutboundMessageSubmissionSafetyTest extends TestCase
 {
-    public function testSubmissionStateMachine(): void
+    public function testSubmissionStateMachineRecordsTimestamps(): void
     {
         $message =
             new OutboundMessage(
                 'submission-state-machine',
+            );
+
+        $readyAt =
+            new DateTimeImmutable(
+                '2026-09-10T18:00:00+00:00',
+                new DateTimeZone('UTC'),
+            );
+
+        $submittingAt =
+            new DateTimeImmutable(
+                '2026-09-10T18:00:01+00:00',
+                new DateTimeZone('UTC'),
+            );
+
+        $submittedAt =
+            new DateTimeImmutable(
+                '2026-09-10T18:00:02+00:00',
+                new DateTimeZone('UTC'),
             );
 
         self::assertSame(
@@ -23,60 +43,151 @@ final class OutboundMessageSubmissionSafetyTest extends TestCase
             $message->getStatus(),
         );
 
-        $message->markReadyForSubmission();
-
-        self::assertSame(
-            OutboundMessageStatus::READY_FOR_SUBMISSION,
-            $message->getStatus(),
+        self::assertNull(
+            $message->getReadyForSubmissionAt(),
         );
 
-        $message->markSubmitting();
-
-        self::assertSame(
-            OutboundMessageStatus::SUBMITTING,
-            $message->getStatus(),
+        self::assertNull(
+            $message->getSubmittingAt(),
         );
 
-        $message->markSubmitted();
+        self::assertNull(
+            $message->getSubmissionUncertainAt(),
+        );
+
+        self::assertNull(
+            $message->getSubmittedAt(),
+        );
+
+        $message->markReadyForSubmission(
+            $readyAt,
+        );
+
+        $message->markSubmitting(
+            $submittingAt,
+        );
+
+        $message->markSubmitted(
+            $submittedAt,
+        );
 
         self::assertSame(
             OutboundMessageStatus::SUBMITTED,
             $message->getStatus(),
         );
 
-        self::assertNotNull(
+        self::assertSame(
+            $readyAt,
             $message->getReadyForSubmissionAt(),
         );
 
-        self::assertNotNull(
+        self::assertSame(
+            $submittingAt,
+            $message->getSubmittingAt(),
+        );
+
+        self::assertNull(
+            $message->getSubmissionUncertainAt(),
+        );
+
+        self::assertSame(
+            $submittedAt,
             $message->getSubmittedAt(),
         );
     }
 
-    public function testSubmittingCanBecomeUncertain(): void
+    public function testUncertainSubmissionRecordsTimestamp(): void
     {
         $message =
             new OutboundMessage(
                 'submission-uncertain',
             );
 
+        $uncertainAt =
+            new DateTimeImmutable(
+                '2026-09-10T18:01:00+00:00',
+                new DateTimeZone('UTC'),
+            );
+
         $message->markReadyForSubmission();
         $message->markSubmitting();
-        $message->markSubmissionUncertain();
+
+        self::assertNotNull(
+            $message->getSubmittingAt(),
+        );
+
+        $message->markSubmissionUncertain(
+            $uncertainAt,
+        );
 
         self::assertSame(
             OutboundMessageStatus::SUBMISSION_UNCERTAIN,
             $message->getStatus(),
         );
 
-        /*
-         * A final uncertain state cannot accidentally return to READY.
-         */
+        self::assertSame(
+            $uncertainAt,
+            $message->getSubmissionUncertainAt(),
+        );
+
+        self::assertNull(
+            $message->getSubmittedAt(),
+        );
+    }
+
+    public function testRepeatedSubmittingDoesNotReplaceTimestamp(): void
+    {
+        $message =
+            new OutboundMessage(
+                'repeated-submitting',
+            );
+
+        $first =
+            new DateTimeImmutable(
+                '2026-09-10T18:02:00+00:00',
+            );
+
+        $second =
+            new DateTimeImmutable(
+                '2026-09-10T18:03:00+00:00',
+            );
+
         $message->markReadyForSubmission();
+        $message->markSubmitting($first);
+        $message->markSubmitting($second);
 
         self::assertSame(
-            OutboundMessageStatus::SUBMISSION_UNCERTAIN,
-            $message->getStatus(),
+            $first,
+            $message->getSubmittingAt(),
+        );
+    }
+
+    public function testRepeatedUncertainDoesNotReplaceTimestamp(): void
+    {
+        $message =
+            new OutboundMessage(
+                'repeated-uncertain',
+            );
+
+        $first =
+            new DateTimeImmutable(
+                '2026-09-10T18:04:00+00:00',
+            );
+
+        $second =
+            new DateTimeImmutable(
+                '2026-09-10T18:05:00+00:00',
+            );
+
+        $message->markReadyForSubmission();
+        $message->markSubmitting();
+
+        $message->markSubmissionUncertain($first);
+        $message->markSubmissionUncertain($second);
+
+        self::assertSame(
+            $first,
+            $message->getSubmissionUncertainAt(),
         );
     }
 
