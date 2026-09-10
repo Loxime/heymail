@@ -125,9 +125,7 @@ final class OutboundMessage
     ): void {
         if (
             $this->status
-            === OutboundMessageStatus::READY_FOR_SUBMISSION
-            || $this->status
-            === OutboundMessageStatus::SUBMITTED
+            !== OutboundMessageStatus::QUEUED
         ) {
             return;
         }
@@ -142,6 +140,60 @@ final class OutboundMessage
             );
     }
 
+    /**
+     * Marks the beginning of the irreversible SMTP boundary.
+     *
+     * This transition must be flushed before attempting SMTP.
+     */
+    public function markSubmitting(): void
+    {
+        if (
+            $this->status
+            === OutboundMessageStatus::SUBMITTING
+        ) {
+            return;
+        }
+
+        if (
+            $this->status
+            !== OutboundMessageStatus::READY_FOR_SUBMISSION
+        ) {
+            throw new LogicException(
+                'Outbound message must be ready before submission starts.',
+            );
+        }
+
+        $this->status =
+            OutboundMessageStatus::SUBMITTING;
+    }
+
+    /**
+     * Marks an SMTP attempt whose definitive outcome is unknown.
+     *
+     * Automatic SMTP submission must never resume from this state.
+     */
+    public function markSubmissionUncertain(): void
+    {
+        if (
+            $this->status
+            === OutboundMessageStatus::SUBMISSION_UNCERTAIN
+        ) {
+            return;
+        }
+
+        if (
+            $this->status
+            !== OutboundMessageStatus::SUBMITTING
+        ) {
+            throw new LogicException(
+                'Only a submitting message can become submission uncertain.',
+            );
+        }
+
+        $this->status =
+            OutboundMessageStatus::SUBMISSION_UNCERTAIN;
+    }
+
     public function markSubmitted(
         ?DateTimeImmutable $at = null,
     ): void {
@@ -152,12 +204,19 @@ final class OutboundMessage
             return;
         }
 
+        /*
+         * READY_FOR_SUBMISSION remains accepted here for compatibility
+         * with existing domain callers and tests. The production handler
+         * always persists SUBMITTING before SMTP.
+         */
         if (
             $this->status
+            !== OutboundMessageStatus::SUBMITTING
+            && $this->status
             !== OutboundMessageStatus::READY_FOR_SUBMISSION
         ) {
             throw new LogicException(
-                'Outbound message must be ready before submission.',
+                'Outbound message must be ready or submitting before submission.',
             );
         }
 
