@@ -205,16 +205,53 @@ DATA_INTERNAL="$(
 
 pass "heymail_data is internal"
 
+docker compose exec -T api     php -r '
+        if (gethostbyname("postfix") !== "postfix") {
+            exit(1);
+        }
+    '     || fail "Postfix is unexpectedly reachable from API"
+
+pass "Postfix is absent from API network namespace"
+
 # ---------------------------------------------------------------------------
 # FPM exposure
 # ---------------------------------------------------------------------------
 
-docker compose exec -T api sh -lc '
-grep -Eq "^[[:space:]]*listen[[:space:]]*=[[:space:]]*127\.0\.0\.1:9000[[:space:]]*$" \
+docker compose exec -T api sh -ec '
+grep -Fxq \
+    "listen = /run/heymail-fpm/heymail.sock" \
     /usr/local/etc/php-fpm.d/zz-heymail.conf
-' || fail "PHP-FPM is not restricted to loopback"
+' || fail "PHP-FPM configuration does not select the HeyMail Unix socket"
 
-pass "PHP-FPM listens only on container loopback"
+pass "PHP-FPM configuration selects the private Unix socket"
+
+docker compose exec -T api \
+    test -S /run/heymail-fpm/heymail.sock \
+    || fail "PHP-FPM Unix socket does not exist at runtime"
+
+pass "PHP-FPM Unix socket exists at runtime"
+
+docker compose exec -T api \
+    php -r '
+        $errno = 0;
+        $error = "";
+
+        $socket = @fsockopen(
+            "127.0.0.1",
+            9000,
+            $errno,
+            $error,
+            1.0,
+        );
+
+        if (is_resource($socket)) {
+            fclose($socket);
+            exit(1);
+        }
+    ' \
+    || fail "PHP-FPM still exposes TCP port 9000"
+
+pass "PHP-FPM exposes no TCP FastCGI listener"
 
 docker compose exec -T api \
     php-fpm -tt >/dev/null 2>&1 \
@@ -238,6 +275,9 @@ set -eu
 
 test -r /run/secrets/app_secret
 test -r /run/secrets/postgres_app_password
+test -r /run/secrets/payload_kek_v1
+test -r /run/secrets/api_key
+test -r /run/secrets/api_secret
 
 test ! -e /run/secrets/postgres_password
 test ! -e /run/secrets/postgres_migrator_password
@@ -260,6 +300,40 @@ grep -Fxq \
     <<<"$ENV_DUMP" \
     || fail "DB_PASSWORD_FILE path is missing"
 
+grep -Fxq \
+    'PAYLOAD_KEK_FILE=/run/secrets/payload_kek_v1' \
+    <<<"$ENV_DUMP" \
+    || fail "PAYLOAD_KEK_FILE path is missing"
+
+grep -Fxq \
+    'MAILER_DSN=null://null' \
+    <<<"$ENV_DUMP" \
+    || fail "API Mailer transport is not disabled"
+
+grep -Fxq \
+    'HEYMAIL_BOUNCE_DOMAIN=heymail.test' \
+    <<<"$ENV_DUMP" \
+    || fail "API bounce-domain policy is missing"
+
+pass "API Mailer transport is explicitly disabled"
+
+grep -Fxq \
+    'HEYMAIL_API_KEY_FILE=/run/secrets/api_key' \
+    <<<"$ENV_DUMP" \
+    || fail "API key secret path is missing"
+
+grep -Fxq \
+    'HEYMAIL_API_SECRET_FILE=/run/secrets/api_secret' \
+    <<<"$ENV_DUMP" \
+    || fail "API secret path is missing"
+
+grep -Fxq \
+    'DEFAULT_URI=https://api.heymail.test' \
+    <<<"$ENV_DUMP" \
+    || fail "canonical HeyMail API URI is missing"
+
+pass "canonical HeyMail API URI is configured"
+
 pass "environment contains secret paths rather than secret values"
 
 # Ensure known secret values themselves did not leak to the runtime
@@ -274,6 +348,9 @@ IMAGE_HISTORY="$(
 for SECRET_FILE in \
     secrets/app_secret \
     secrets/postgres_app_password \
+    secrets/payload_kek_v1 \
+    secrets/api_key \
+    secrets/api_secret \
     secrets/postgres_password \
     secrets/postgres_migrator_password
 do

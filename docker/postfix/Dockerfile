@@ -39,7 +39,7 @@ RUN set -eux; \
     postconf -e 'milter_protocol = 6'; \
     postconf -e 'milter_connect_timeout = 5s'; \
     postconf -e 'milter_command_timeout = 5s'; \
-    postconf -e 'milter_content_timeout = 10s'; \
+    postconf -e 'milter_content_timeout = 60s'; \
     \
     postconf -e 'queue_run_delay = 5s'; \
     postconf -e 'minimal_backoff_time = 5s'; \
@@ -51,10 +51,39 @@ RUN set -eux; \
     \
     sed -i \
         -E '/^[[:space:]]*smtp[[:space:]]+inet[[:space:]]/s/^/#/' \
-        /etc/postfix/master.cf
+        /etc/postfix/master.cf; \
+    \
+    postconf -M \
+        'postfix-mail:10025/inet=postfix-mail:10025 inet n - n - - smtpd'; \
+    \
+    postconf -P \
+        'postfix-mail:10025/inet/syslog_name=postfix/heymail-submission'; \
+    postconf -P \
+        'postfix-mail:10025/inet/smtpd_milters=inet:rspamd:11332'; \
+    postconf -P \
+        'postfix-mail:10025/inet/milter_macro_daemon_name=ORIGINATING'; \
+    postconf -e \
+        'heymail_submission_relay_restrictions = check_recipient_access pcre:/etc/postfix/submission-recipient-access.pcre, reject'; \
+    postconf -P \
+        'postfix-mail:10025/inet/smtpd_relay_restrictions=$heymail_submission_relay_restrictions'; \
+    postconf -P \
+        'postfix-mail:10025/inet/smtpd_recipient_restrictions=permit'; \
+    postconf -P \
+        'postfix-mail:10025/inet/smtpd_peername_lookup=no'; \
+    postconf -P \
+        'postfix-mail:10025/inet/smtpd_sasl_auth_enable=no'; \
+    postconf -P \
+        'postfix-mail:10025/inet/smtpd_tls_security_level=none'; \
+    postconf -P \
+        'postfix-mail:10025/inet/smtpd_helo_required=yes'; \
+    postconf -P \
+        'postfix-mail:10025/inet/disable_vrfy_command=yes'
 
 COPY docker/postfix/transport.pcre \
     /etc/postfix/transport.pcre
+
+COPY docker/postfix/submission-recipient-access.pcre \
+    /etc/postfix/submission-recipient-access.pcre
 
 COPY docker/postfix/entrypoint.sh \
     /usr/local/bin/heymail-postfix-entrypoint
@@ -63,9 +92,19 @@ COPY docker/postfix/healthcheck.sh \
     /usr/local/bin/heymail-postfix-healthcheck
 
 RUN set -eux; \
+    newaliases; \
+    test -f /etc/postfix/aliases.lmdb; \
     chmod 0444 /etc/postfix/transport.pcre; \
+    chmod 0444 /etc/postfix/submission-recipient-access.pcre; \
+    test "$(postmap -q 'probe@success.test' pcre:/etc/postfix/submission-recipient-access.pcre)" = "PERMIT"; \
+    test "$(postmap -q 'probe@tempfail.test' pcre:/etc/postfix/submission-recipient-access.pcre)" = "PERMIT"; \
+    test "$(postmap -q 'probe@permfail.test' pcre:/etc/postfix/submission-recipient-access.pcre)" = "PERMIT"; \
+    test -z "$(postmap -q 'blocked@example.com' pcre:/etc/postfix/submission-recipient-access.pcre)"; \
     chmod 0555 /usr/local/bin/heymail-postfix-entrypoint; \
     chmod 0555 /usr/local/bin/heymail-postfix-healthcheck; \
+    postconf -Mf 'postfix-mail:10025/inet' >/dev/null; \
+    postconf -P \
+        'postfix-mail:10025/inet/smtpd_milters' >/dev/null; \
     postfix check
 
 ENTRYPOINT ["/usr/local/bin/heymail-postfix-entrypoint"]

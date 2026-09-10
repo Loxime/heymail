@@ -85,6 +85,24 @@ try {
     }
 
     /*
+     * FastCGI runtime boundary.
+     *
+     * The reverse proxy reaches PHP-FPM exclusively through this Unix
+     * socket. A running PHP process without this socket is not a healthy
+     * HTTP API runtime.
+     */
+    $fpmSocket = '/run/heymail-fpm/heymail.sock';
+
+    if (
+        !file_exists($fpmSocket)
+        || filetype($fpmSocket) !== 'socket'
+    ) {
+        throw new RuntimeException(
+            'PHP-FPM Unix socket is missing.',
+        );
+    }
+
+    /*
      * Runtime secrets.
      */
     readSecret('APP_SECRET_FILE');

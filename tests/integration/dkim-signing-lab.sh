@@ -215,6 +215,7 @@ POSTFIX_NETWORKS="$(
 EXPECTED_POSTFIX_NETWORKS="$(
     printf '%s\n' \
         heymail_filter \
+        heymail_mail \
         heymail_smtp_lab \
         | sort
 )"
@@ -222,7 +223,7 @@ EXPECTED_POSTFIX_NETWORKS="$(
 [ "$POSTFIX_NETWORKS" = "$EXPECTED_POSTFIX_NETWORKS" ] \
     || fail "unexpected Postfix network boundary"
 
-pass "Postfix bridges only smtp_lab_net and filter_net"
+pass "Postfix bridges only mail_net, smtp_lab_net and filter_net"
 
 
 docker compose exec -T postfix \

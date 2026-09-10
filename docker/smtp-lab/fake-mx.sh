@@ -33,6 +33,12 @@ if [ -n "$CAPTURE_DIR" ]; then
         echo "Capture directory is not writable" >&2
         exit 1
     }
+
+    mkdir -p \
+        "$CAPTURE_DIR/messages"
+
+    chmod 0700 \
+        "$CAPTURE_DIR/messages"
 fi
 
 umask 077
@@ -55,18 +61,34 @@ begin_capture() {
         CAPTURE_TMP="${CAPTURE_DIR}/message.$$.tmp"
 
         : > "$CAPTURE_TMP"
-        chmod 0600 "$CAPTURE_TMP"
+
+        chmod 0600 \
+            "$CAPTURE_TMP"
     fi
 }
 
 finish_capture() {
-    if [ -n "$CAPTURE_TMP" ]; then
-        mv -f \
-            "$CAPTURE_TMP" \
-            "${CAPTURE_DIR}/last.eml"
-
-        CAPTURE_TMP=""
+    if [ -z "$CAPTURE_TMP" ]; then
+        return
     fi
+
+    FINAL_CAPTURE="${CAPTURE_DIR}/messages/message.$$.eml"
+
+    mv \
+        "$CAPTURE_TMP" \
+        "$FINAL_CAPTURE"
+
+    CAPTURE_TMP=""
+
+    chmod 0600 \
+        "$FINAL_CAPTURE"
+
+    cp \
+        "$FINAL_CAPTURE" \
+        "${CAPTURE_DIR}/last.eml"
+
+    chmod 0600 \
+        "${CAPTURE_DIR}/last.eml"
 }
 
 trap cleanup_capture EXIT HUP INT TERM
@@ -82,6 +104,7 @@ do
     if [ "$IN_DATA" -eq 1 ]; then
         if [ "$LINE" = "." ]; then
             IN_DATA=0
+
             finish_capture
 
             reply "250 2.0.0 Message accepted by HeyMail SMTP Lab"
@@ -138,6 +161,7 @@ do
         DATA)
             if [ "$MODE" = "success" ]; then
                 begin_capture
+
                 IN_DATA=1
 
                 reply "354 End data with <CR><LF>.<CR><LF>"
@@ -148,6 +172,7 @@ do
 
         RSET)
             IN_DATA=0
+
             cleanup_capture
 
             reply "250 2.0.0 Reset"
@@ -159,6 +184,7 @@ do
 
         QUIT)
             reply "221 2.0.0 Bye"
+
             exit 0
             ;;
 
