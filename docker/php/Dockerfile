@@ -54,13 +54,13 @@ RUN set -eux; \
 
 WORKDIR /app
 
-COPY docker/php/heymail.ini \
+COPY --chmod=0644 docker/php/heymail.ini \
     /usr/local/etc/php/conf.d/zz-heymail.ini
 
-COPY docker/php/heymail-fpm.conf \
+COPY --chmod=0644 docker/php/heymail-fpm.conf \
     /usr/local/etc/php-fpm.d/zz-heymail.conf
 
-COPY docker/php/healthcheck.php \
+COPY --chmod=0644 docker/php/healthcheck.php \
     /usr/local/bin/heymail-healthcheck.php
 
 COPY --from=vendor --chown=heymail:heymail /app /app

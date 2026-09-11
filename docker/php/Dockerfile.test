@@ -70,7 +70,7 @@ RUN composer install \
     --no-plugins \
     --no-autoloader
 
-COPY apps/api/ /app/
+COPY --chown=heymail:heymail apps/api/ /app/
 
 RUN set -eux; \
     composer dump-autoload \

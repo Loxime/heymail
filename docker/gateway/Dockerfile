@@ -21,7 +21,7 @@ RUN set -eux; \
         ca-certificates; \
     rm -rf /etc/nginx/http.d/*
 
-COPY docker/gateway/nginx.conf \
+COPY --chmod=0644 docker/gateway/nginx.conf \
     /etc/nginx/nginx.conf
 
 USER heymail:heymail
