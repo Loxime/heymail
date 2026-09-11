@@ -285,10 +285,98 @@ services:
       - outbound
       - --time-limit=3600
       - --memory-limit=192M
-      - --sleep=1000
+      - --sleep=1
       - --no-interaction
 
     stop_grace_period: 30s
+
+
+  # =========================================================================
+  # Sending-domain DNS ownership worker
+  #
+  # Consumes only DNS verification jobs.
+  # It can reach PostgreSQL and the isolated DNS laboratory, but never the
+  # SMTP, filter or public gateway networks.
+  # =========================================================================
+
+  domain-verifier:
+    build:
+      context: .
+      dockerfile: docker/php/Dockerfile
+      args:
+        HEYMAIL_UID: ${HEYMAIL_UID:?HEYMAIL_UID is required}
+        HEYMAIL_GID: ${HEYMAIL_GID:?HEYMAIL_GID is required}
+
+    image: heymail-api:local
+
+    restart: unless-stopped
+
+    user: "${HEYMAIL_UID:?HEYMAIL_UID is required}:${HEYMAIL_GID:?HEYMAIL_GID is required}"
+
+    environment:
+      APP_ENV: prod
+      APP_DEBUG: "0"
+      DEFAULT_URI: "https://api.heymail.test"
+      APP_RUNTIME_OPTIONS: '{"disable_dotenv":true}'
+      APP_SECRET_FILE: /run/secrets/app_secret
+      MAILER_DSN: "null://null"
+      HEYMAIL_BOUNCE_DOMAIN: "heymail.test"
+
+      DNS_VERIFY_HOST: fake-dns
+      DNS_VERIFY_PORT: "8053"
+      DNS_VERIFY_TIMEOUT_MS: "2000"
+
+      DB_HOST: database
+      DB_PORT: "5432"
+      DB_NAME: ${POSTGRES_DB:?POSTGRES_DB is required}
+      DB_USER: heymail_app
+      DB_PASSWORD_FILE: /run/secrets/postgres_app_password
+
+    secrets:
+      - app_secret
+      - postgres_app_password
+
+    networks:
+      - data_net
+      - dns_lab_net
+
+    depends_on:
+      database:
+        condition: service_healthy
+
+      database-bootstrap:
+        condition: service_completed_successfully
+
+      fake-dns:
+        condition: service_healthy
+
+    read_only: true
+
+    tmpfs:
+      - /tmp:size=32m,mode=1777
+      - /app/var:size=64m,mode=0770,uid=${HEYMAIL_UID},gid=${HEYMAIL_GID}
+
+    security_opt:
+      - no-new-privileges:true
+
+    cap_drop:
+      - ALL
+
+    pids_limit: 100
+    mem_limit: 256m
+    cpus: 0.50
+
+    command:
+      - php
+      - bin/console
+      - messenger:consume
+      - domain_verification
+      - --time-limit=3600
+      - --memory-limit=128M
+      - --sleep=1
+      - --no-interaction
+
+    stop_grace_period: 15s
 
 
   # =========================================================================
@@ -471,6 +559,60 @@ services:
       timeout: 3s
       retries: 10
       start_period: 5s
+
+
+  # =========================================================================
+  # Authoritative DNS laboratory
+  #
+  # Serves dynamic TXT records used by the sending-domain ownership tests.
+  # The service is isolated from the host and all SMTP networks.
+  # =========================================================================
+
+  fake-dns:
+    build:
+      context: .
+      dockerfile: docker/dns-lab/Dockerfile
+
+    image: heymail-fake-dns:lab
+
+    restart: unless-stopped
+
+    user: "10003:10003"
+
+    networks:
+      - dns_lab_net
+
+    expose:
+      - "8053/udp"
+
+    read_only: true
+
+    tmpfs:
+      - /tmp:size=8m,mode=1777
+      - /records:size=8m,uid=10003,gid=10003,mode=0700
+
+    security_opt:
+      - no-new-privileges:true
+
+    cap_drop:
+      - ALL
+
+    pids_limit: 30
+    mem_limit: 64m
+    cpus: 0.10
+
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "php",
+          "/usr/local/bin/heymail-fake-dns.php",
+          "--healthcheck"
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 3s
 
 
   # =========================================================================
@@ -851,6 +993,11 @@ networks:
 
   smtp_lab_net:
     name: heymail_smtp_lab
+    driver: bridge
+    internal: true
+
+  dns_lab_net:
+    name: heymail_dns_lab
     driver: bridge
     internal: true
 
