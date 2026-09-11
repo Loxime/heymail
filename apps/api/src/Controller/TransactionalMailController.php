@@ -9,6 +9,7 @@ use App\Entity\OutboundMessage;
 use App\Mail\IdempotencyConflictException;
 use App\Mail\OutboundEmailPayload;
 use App\Mail\OutboundMessageSubmissionService;
+use App\Mail\SenderAuthorizationService;
 use Doctrine\ORM\EntityManagerInterface;
 use InvalidArgumentException;
 use JsonException;
@@ -25,6 +26,7 @@ final readonly class TransactionalMailController
     public function __construct(
         private ApiCredentials $credentials,
         private OutboundMessageSubmissionService $submissionService,
+        private SenderAuthorizationService $senderAuthorization,
         private EntityManagerInterface $entityManager,
     ) {
     }
@@ -117,6 +119,20 @@ final readonly class TransactionalMailController
                 'invalid_payload',
                 $exception->getMessage(),
                 Response::HTTP_UNPROCESSABLE_ENTITY,
+            );
+        }
+
+        if (
+            !$this
+                ->senderAuthorization
+                ->authorizes(
+                    $payload->from,
+                )
+        ) {
+            return self::error(
+                'sender_not_authorized',
+                'From address is not an authorized sender.',
+                Response::HTTP_FORBIDDEN,
             );
         }
 
