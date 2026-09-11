@@ -49,6 +49,10 @@ final class SendingDomainTest extends TestCase
         );
 
         self::assertNull(
+            $domain->getVerificationCheckedAt(),
+        );
+
+        self::assertNull(
             $domain->getVerifiedAt(),
         );
 
@@ -57,11 +61,45 @@ final class SendingDomainTest extends TestCase
         );
     }
 
+    public function testPendingDomainCanRecordFailedVerificationCheck(): void
+    {
+        $checkedAt =
+            new DateTimeImmutable(
+                '2026-09-11T15:00:00+00:00',
+            );
+
+        $domain =
+            new SendingDomain(
+                new DomainName(
+                    'example.com',
+                ),
+                self::TOKEN,
+            );
+
+        $domain->markVerificationChecked(
+            $checkedAt,
+        );
+
+        self::assertSame(
+            SendingDomainStatus::PENDING,
+            $domain->getStatus(),
+        );
+
+        self::assertSame(
+            $checkedAt,
+            $domain->getVerificationCheckedAt(),
+        );
+
+        self::assertNull(
+            $domain->getVerifiedAt(),
+        );
+    }
+
     public function testPendingDomainCanBeVerified(): void
     {
         $verifiedAt =
             new DateTimeImmutable(
-                '2026-09-10T20:00:00+00:00',
+                '2026-09-11T15:00:00+00:00',
             );
 
         $domain =
@@ -83,6 +121,11 @@ final class SendingDomainTest extends TestCase
 
         self::assertSame(
             $verifiedAt,
+            $domain->getVerificationCheckedAt(),
+        );
+
+        self::assertSame(
+            $verifiedAt,
             $domain->getVerifiedAt(),
         );
     }
@@ -91,12 +134,12 @@ final class SendingDomainTest extends TestCase
     {
         $first =
             new DateTimeImmutable(
-                '2026-09-10T20:00:00+00:00',
+                '2026-09-11T15:00:00+00:00',
             );
 
         $second =
             new DateTimeImmutable(
-                '2026-09-10T21:00:00+00:00',
+                '2026-09-11T16:00:00+00:00',
             );
 
         $domain =
@@ -112,8 +155,32 @@ final class SendingDomainTest extends TestCase
 
         self::assertSame(
             $first,
+            $domain->getVerificationCheckedAt(),
+        );
+
+        self::assertSame(
+            $first,
             $domain->getVerifiedAt(),
         );
+    }
+
+    public function testDisabledDomainCannotRecordVerificationCheck(): void
+    {
+        $domain =
+            new SendingDomain(
+                new DomainName(
+                    'example.com',
+                ),
+                self::TOKEN,
+            );
+
+        $domain->disable();
+
+        $this->expectException(
+            LogicException::class,
+        );
+
+        $domain->markVerificationChecked();
     }
 
     public function testDisabledDomainCannotBecomeVerified(): void

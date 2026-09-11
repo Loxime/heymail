@@ -6,7 +6,9 @@ namespace App\Controller;
 
 use App\Api\ApiCredentials;
 use App\Entity\SendingDomain;
+use App\Enum\SendingDomainStatus;
 use App\Mail\SendingDomainRegistrationService;
+use App\Message\VerifySendingDomain;
 use Doctrine\ORM\EntityManagerInterface;
 use InvalidArgumentException;
 use JsonException;
@@ -14,6 +16,7 @@ use RuntimeException;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\Messenger\MessageBusInterface;
 use Symfony\Component\Routing\Attribute\Route;
 
 final readonly class SendingDomainController
@@ -24,6 +27,7 @@ final readonly class SendingDomainController
         private ApiCredentials $credentials,
         private SendingDomainRegistrationService $registrationService,
         private EntityManagerInterface $entityManager,
+        private MessageBusInterface $messageBus,
     ) {
     }
 
@@ -54,7 +58,8 @@ final readonly class SendingDomainController
             );
         }
 
-        $rawContent = $request->getContent();
+        $rawContent =
+            $request->getContent();
 
         if (
             strlen($rawContent)
@@ -68,12 +73,13 @@ final readonly class SendingDomainController
         }
 
         try {
-            $decoded = json_decode(
-                $rawContent,
-                true,
-                8,
-                JSON_THROW_ON_ERROR,
-            );
+            $decoded =
+                json_decode(
+                    $rawContent,
+                    true,
+                    8,
+                    JSON_THROW_ON_ERROR,
+                );
         } catch (JsonException) {
             return self::error(
                 'invalid_json',
@@ -85,8 +91,11 @@ final readonly class SendingDomainController
         if (
             !is_array($decoded)
             || array_is_list($decoded)
-            || array_keys($decoded) !== ['domain']
-            || !is_string($decoded['domain'])
+            || array_keys($decoded)
+                !== ['domain']
+            || !is_string(
+                $decoded['domain'],
+            )
         ) {
             return self::error(
                 'invalid_payload',
@@ -97,7 +106,8 @@ final readonly class SendingDomainController
 
         try {
             $registration =
-                $this->registrationService
+                $this
+                    ->registrationService
                     ->register(
                         $decoded['domain'],
                     );
@@ -109,28 +119,32 @@ final readonly class SendingDomainController
             );
         }
 
-        $document = self::serializeDomain(
-            $registration->domain,
-        );
+        $document =
+            self::serializeDomain(
+                $registration->domain,
+            );
 
         $document['replayed'] =
             $registration->replayed;
 
-        $response = new JsonResponse(
-            $document,
-            $registration->replayed
-                ? Response::HTTP_OK
-                : Response::HTTP_CREATED,
-        );
+        $response =
+            new JsonResponse(
+                $document,
+                $registration->replayed
+                    ? Response::HTTP_OK
+                    : Response::HTTP_CREATED,
+            );
 
         if (!$registration->replayed) {
-            $response->headers->set(
-                'Location',
-                sprintf(
-                    '/api/v1/domains/%d',
-                    $document['id'],
-                ),
-            );
+            $response
+                ->headers
+                ->set(
+                    'Location',
+                    sprintf(
+                        '/api/v1/domains/%d',
+                        $document['id'],
+                    ),
+                );
         }
 
         return $response;
@@ -156,29 +170,9 @@ final readonly class SendingDomainController
             return self::unauthorized();
         }
 
-        $domainId = filter_var(
-            $id,
-            FILTER_VALIDATE_INT,
-            [
-                'options' => [
-                    'min_range' => 1,
-                ],
-            ],
-        );
-
-        if (!is_int($domainId)) {
-            return self::error(
-                'domain_not_found',
-                'Sending domain was not found.',
-                Response::HTTP_NOT_FOUND,
-            );
-        }
-
-        $domain = $this
-            ->entityManager
-            ->find(
-                SendingDomain::class,
-                $domainId,
+        $domain =
+            $this->findDomain(
+                $id,
             );
 
         if (
@@ -199,6 +193,131 @@ final readonly class SendingDomainController
         );
     }
 
+    #[Route(
+        '/api/v1/domains/{id}/verify',
+        name: 'api_v1_domain_verify',
+        requirements: [
+            'id' => '[1-9][0-9]*',
+        ],
+        methods: ['POST'],
+    )]
+    public function verify(
+        Request $request,
+        string $id,
+    ): JsonResponse {
+        if (
+            !$this->credentials->authorizes(
+                $request,
+            )
+        ) {
+            return self::unauthorized();
+        }
+
+        $domain =
+            $this->findDomain(
+                $id,
+            );
+
+        if (
+            !$domain
+            instanceof SendingDomain
+        ) {
+            return self::error(
+                'domain_not_found',
+                'Sending domain was not found.',
+                Response::HTTP_NOT_FOUND,
+            );
+        }
+
+        if (
+            $domain->getStatus()
+            === SendingDomainStatus::DISABLED
+        ) {
+            return self::error(
+                'domain_disabled',
+                'Disabled sending domain cannot be verified.',
+                Response::HTTP_CONFLICT,
+            );
+        }
+
+        $document =
+            self::serializeDomain(
+                $domain,
+            );
+
+        if (
+            $domain->getStatus()
+            === SendingDomainStatus::VERIFIED
+        ) {
+            $document['verificationQueued'] =
+                false;
+
+            return new JsonResponse(
+                $document,
+                Response::HTTP_OK,
+            );
+        }
+
+        $domainId =
+            $domain->getId();
+
+        if (
+            !is_int($domainId)
+            || $domainId < 1
+        ) {
+            throw new RuntimeException(
+                'Persisted sending domain has no valid identifier.',
+            );
+        }
+
+        $this->messageBus
+            ->dispatch(
+                new VerifySendingDomain(
+                    $domainId,
+                ),
+            );
+
+        $document['verificationQueued'] =
+            true;
+
+        return new JsonResponse(
+            $document,
+            Response::HTTP_ACCEPTED,
+        );
+    }
+
+    private function findDomain(
+        string $id,
+    ): ?SendingDomain {
+        $domainId =
+            filter_var(
+                $id,
+                FILTER_VALIDATE_INT,
+                [
+                    'options' => [
+                        'min_range' => 1,
+                    ],
+                ],
+            );
+
+        if (!is_int($domainId)) {
+            return null;
+        }
+
+        $domain =
+            $this
+                ->entityManager
+                ->find(
+                    SendingDomain::class,
+                    $domainId,
+                );
+
+        return $domain
+            instanceof SendingDomain
+            ? $domain
+            : null;
+    }
+
     /**
      * @return array{
      *     id: int,
@@ -210,6 +329,7 @@ final readonly class SendingDomainController
      *         value: string
      *     },
      *     createdAt: string,
+     *     verificationCheckedAt: ?string,
      *     verifiedAt: ?string,
      *     disabledAt: ?string
      * }
@@ -217,7 +337,8 @@ final readonly class SendingDomainController
     private static function serializeDomain(
         SendingDomain $domain,
     ): array {
-        $id = $domain->getId();
+        $id =
+            $domain->getId();
 
         if (
             !is_int($id)
@@ -230,7 +351,9 @@ final readonly class SendingDomainController
 
         return [
             'id' => $id,
-            'domain' => $domain->getDomain(),
+            'domain'
+                => $domain
+                    ->getDomain(),
             'status'
                 => $domain
                     ->getStatus()
@@ -248,6 +371,10 @@ final readonly class SendingDomainController
                 => $domain
                     ->getCreatedAt()
                     ->format(DATE_ATOM),
+            'verificationCheckedAt'
+                => $domain
+                    ->getVerificationCheckedAt()
+                    ?->format(DATE_ATOM),
             'verifiedAt'
                 => $domain
                     ->getVerifiedAt()
@@ -261,16 +388,19 @@ final readonly class SendingDomainController
 
     private static function unauthorized(): JsonResponse
     {
-        $response = self::error(
-            'unauthorized',
-            'Invalid API credentials.',
-            Response::HTTP_UNAUTHORIZED,
-        );
+        $response =
+            self::error(
+                'unauthorized',
+                'Invalid API credentials.',
+                Response::HTTP_UNAUTHORIZED,
+            );
 
-        $response->headers->set(
-            'WWW-Authenticate',
-            'Basic realm="HeyMail API"',
-        );
+        $response
+            ->headers
+            ->set(
+                'WWW-Authenticate',
+                'Basic realm="HeyMail API"',
+            );
 
         return $response;
     }

@@ -55,6 +55,13 @@ final class SendingDomain
     private DateTimeImmutable $createdAt;
 
     #[ORM\Column(
+        name: 'verification_checked_at',
+        type: Types::DATETIME_IMMUTABLE,
+        nullable: true,
+    )]
+    private ?DateTimeImmutable $verificationCheckedAt = null;
+
+    #[ORM\Column(
         type: Types::DATETIME_IMMUTABLE,
         nullable: true,
     )]
@@ -91,11 +98,9 @@ final class SendingDomain
         $this->status =
             SendingDomainStatus::PENDING;
 
-        $this->createdAt = $createdAt
-            ?? new DateTimeImmutable(
-                'now',
-                new DateTimeZone('UTC'),
-            );
+        $this->createdAt =
+            $createdAt
+            ?? self::now();
     }
 
     public function getId(): ?int
@@ -121,6 +126,11 @@ final class SendingDomain
     public function getCreatedAt(): DateTimeImmutable
     {
         return $this->createdAt;
+    }
+
+    public function getVerificationCheckedAt(): ?DateTimeImmutable
+    {
+        return $this->verificationCheckedAt;
     }
 
     public function getVerifiedAt(): ?DateTimeImmutable
@@ -149,6 +159,30 @@ final class SendingDomain
         );
     }
 
+    public function markVerificationChecked(
+        ?DateTimeImmutable $at = null,
+    ): void {
+        if (
+            $this->status
+            === SendingDomainStatus::DISABLED
+        ) {
+            throw new LogicException(
+                'Disabled sending domain cannot be verified.',
+            );
+        }
+
+        if (
+            $this->status
+            === SendingDomainStatus::VERIFIED
+        ) {
+            return;
+        }
+
+        $this->verificationCheckedAt =
+            $at
+            ?? self::now();
+    }
+
     public function markVerified(
         ?DateTimeImmutable $at = null,
     ): void {
@@ -168,14 +202,18 @@ final class SendingDomain
             );
         }
 
+        $verifiedAt =
+            $at
+            ?? self::now();
+
         $this->status =
             SendingDomainStatus::VERIFIED;
 
-        $this->verifiedAt = $at
-            ?? new DateTimeImmutable(
-                'now',
-                new DateTimeZone('UTC'),
-            );
+        $this->verificationCheckedAt =
+            $verifiedAt;
+
+        $this->verifiedAt =
+            $verifiedAt;
     }
 
     public function disable(
@@ -191,10 +229,16 @@ final class SendingDomain
         $this->status =
             SendingDomainStatus::DISABLED;
 
-        $this->disabledAt = $at
-            ?? new DateTimeImmutable(
-                'now',
-                new DateTimeZone('UTC'),
-            );
+        $this->disabledAt =
+            $at
+            ?? self::now();
+    }
+
+    private static function now(): DateTimeImmutable
+    {
+        return new DateTimeImmutable(
+            'now',
+            new DateTimeZone('UTC'),
+        );
     }
 }
