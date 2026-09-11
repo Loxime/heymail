@@ -14,6 +14,8 @@ API_ORIGIN="https://api.heymail.test:8443"
 OUTBOUND_ID=""
 AUTH_CONFIG=""
 TEMP_DIR=""
+SENDER_DOMAIN=""
+SENDER_EMAIL=""
 
 fail() {
     printf 'FAIL: %s\n' "$1" >&2
@@ -218,23 +220,27 @@ RECIPIENT="https-e2e-$TOKEN@success.test"
 SUBJECT="HeyMail HTTPS E2E $TOKEN"
 BODY_MARKER="HEYMAIL-HTTPS-E2E-$TOKEN"
 
+SENDER_DOMAIN="heymail.test"
+SENDER_EMAIL="sender-$TOKEN@$SENDER_DOMAIN"
+
 PAYLOAD="$TEMP_DIR/payload.json"
 
 python3 \
-    - "$RECIPIENT" "$SUBJECT" "$BODY_MARKER" \
+    - "$SENDER_EMAIL" "$RECIPIENT" "$SUBJECT" "$BODY_MARKER" \
     > "$PAYLOAD" <<'PY'
 import json
 import sys
 
-recipient = sys.argv[1]
-subject = sys.argv[2]
-body = sys.argv[3]
+sender = sys.argv[1]
+recipient = sys.argv[2]
+subject = sys.argv[3]
+body = sys.argv[4]
 
 print(
     json.dumps(
         {
             "from": {
-                "email": "sender@heymail.test",
+                "email": sender,
                 "name": "HeyMail",
             },
             "to": [
@@ -253,7 +259,7 @@ PY
 CONFLICT_PAYLOAD="$TEMP_DIR/conflict.json"
 
 python3 \
-    - "$RECIPIENT" \
+    - "$SENDER_EMAIL" "$RECIPIENT" \
     > "$CONFLICT_PAYLOAD" <<'PY'
 import json
 import sys
@@ -262,11 +268,11 @@ print(
     json.dumps(
         {
             "from": {
-                "email": "sender@heymail.test",
+                "email": sys.argv[1],
             },
             "to": [
                 {
-                    "email": sys.argv[1],
+                    "email": sys.argv[2],
                 },
             ],
             "subject": "Conflicting HTTPS payload",
@@ -293,6 +299,132 @@ docker compose up \
 docker compose stop \
     mail-worker \
     >/dev/null
+
+docker compose exec \
+    -T \
+    -e SENDER_DOMAIN="$SENDER_DOMAIN" \
+    -e SENDER_EMAIL="$SENDER_EMAIL" \
+    api \
+    php <<'PHP'
+<?php
+
+declare(strict_types=1);
+
+$domain = getenv('SENDER_DOMAIN');
+$email = getenv('SENDER_EMAIL');
+
+if (
+    !is_string($domain)
+    || $domain === ''
+    || !is_string($email)
+    || $email === ''
+) {
+    exit(1);
+}
+
+$pdo = new PDO(
+    sprintf(
+        'pgsql:host=%s;port=%s;dbname=%s',
+        getenv('DB_HOST'),
+        getenv('DB_PORT'),
+        getenv('DB_NAME'),
+    ),
+    getenv('DB_USER'),
+    trim(
+        file_get_contents(
+            (string) getenv('DB_PASSWORD_FILE'),
+        ),
+    ),
+    [
+        PDO::ATTR_ERRMODE
+            => PDO::ERRMODE_EXCEPTION,
+    ],
+);
+
+$now =
+    (new DateTimeImmutable(
+        'now',
+        new DateTimeZone('UTC'),
+    ))
+    ->format('Y-m-d H:i:s');
+
+$token =
+    hash(
+        'sha256',
+        'transactional-fixture:'
+        . $domain,
+    );
+
+$domainInsert =
+    $pdo->prepare(
+        <<<'SQL'
+INSERT INTO sending_domain (
+    domain,
+    status,
+    verification_token,
+    created_at,
+    verification_checked_at,
+    verified_at,
+    disabled_at
+)
+VALUES (
+    :domain,
+    'verified',
+    :token,
+    :created_at,
+    :verified_at,
+    :verified_at,
+    NULL
+)
+ON CONFLICT (domain) DO UPDATE
+SET
+    status = 'verified',
+    verification_checked_at = EXCLUDED.verification_checked_at,
+    verified_at = EXCLUDED.verified_at,
+    disabled_at = NULL
+RETURNING id
+SQL
+    );
+
+$domainInsert->execute([
+    'domain' => $domain,
+    'token' => $token,
+    'created_at' => $now,
+    'verified_at' => $now,
+]);
+
+$domainId =
+    $domainInsert->fetchColumn();
+
+if (
+    !is_string($domainId)
+    && !is_int($domainId)
+) {
+    exit(1);
+}
+
+$senderInsert =
+    $pdo->prepare(
+        <<<'SQL'
+INSERT INTO sender_identity (
+    sending_domain_id,
+    email,
+    created_at
+)
+VALUES (
+    :domain_id,
+    :email,
+    :created_at
+)
+SQL
+    );
+
+$senderInsert->execute([
+    'domain_id' => $domainId,
+    'email' => $email,
+    'created_at' => $now,
+]);
+PHP
 
 docker compose exec -T fake-mx-success \
     rm -f /capture/last.eml \
