@@ -872,6 +872,60 @@ SUBMITTED_AT="$(
 
 pass "normal submission exposes coherent lifecycle timestamps"
 
+TIMELINE="$(
+    docker compose exec \
+        -T \
+        -e OUTBOUND_ID="$OUTBOUND_ID" \
+        api \
+        php <<'PHP'
+<?php
+
+declare(strict_types=1);
+
+$pdo = new PDO(
+    sprintf(
+        'pgsql:host=%s;port=%s;dbname=%s',
+        getenv('DB_HOST'),
+        getenv('DB_PORT'),
+        getenv('DB_NAME'),
+    ),
+    getenv('DB_USER'),
+    trim(
+        file_get_contents(
+            (string) getenv('DB_PASSWORD_FILE'),
+        ),
+    ),
+    [
+        PDO::ATTR_ERRMODE
+            => PDO::ERRMODE_EXCEPTION,
+    ],
+);
+
+$stmt = $pdo->prepare(
+    <<<'SQL'
+SELECT event_type
+FROM outbound_message_event
+WHERE outbound_message_id = :id
+ORDER BY occurred_at ASC, id ASC
+SQL
+);
+
+$stmt->execute([
+    'id' => getenv('OUTBOUND_ID'),
+]);
+
+echo implode(
+    '>',
+    $stmt->fetchAll(PDO::FETCH_COLUMN),
+);
+PHP
+)"
+
+[ "$TIMELINE" = "queued>ready_for_submission>submitting>submitted" ] \
+    || fail "unexpected successful delivery timeline: $TIMELINE"
+
+pass "successful submission persists the complete immutable event timeline"
+
 # ---------------------------------------------------------------------------
 # Real SMTP laboratory delivery
 # ---------------------------------------------------------------------------

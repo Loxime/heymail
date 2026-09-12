@@ -7,6 +7,8 @@ namespace App\Entity;
 use App\Enum\OutboundMessageStatus;
 use DateTimeImmutable;
 use DateTimeZone;
+use Doctrine\Common\Collections\ArrayCollection;
+use Doctrine\Common\Collections\Collection;
 use Doctrine\DBAL\Types\Types;
 use Doctrine\ORM\Mapping as ORM;
 use InvalidArgumentException;
@@ -67,6 +69,20 @@ final class OutboundMessage
     )]
     private ?DateTimeImmutable $submittedAt = null;
 
+    /**
+     * @var Collection<int, OutboundMessageEvent>
+     */
+    #[ORM\OneToMany(
+        mappedBy: 'outboundMessage',
+        targetEntity: OutboundMessageEvent::class,
+        cascade: ['persist'],
+    )]
+    #[ORM\OrderBy([
+        'occurredAt' => 'ASC',
+        'id' => 'ASC',
+    ])]
+    private Collection $events;
+
     public function __construct(string $idempotencyKey)
     {
         $length = strlen(
@@ -100,6 +116,14 @@ final class OutboundMessage
                 'now',
                 new DateTimeZone('UTC'),
             );
+
+        $this->events =
+            new ArrayCollection();
+
+        $this->recordEvent(
+            OutboundMessageStatus::QUEUED,
+            $this->createdAt,
+        );
     }
 
     public function getId(): ?int
@@ -142,6 +166,16 @@ final class OutboundMessage
         return $this->submittedAt;
     }
 
+    /**
+     * @return list<OutboundMessageEvent>
+     */
+    public function getEvents(): array
+    {
+        return array_values(
+            $this->events->toArray(),
+        );
+    }
+
     public function markReadyForSubmission(
         ?DateTimeImmutable $at = null,
     ): void {
@@ -152,14 +186,19 @@ final class OutboundMessage
             return;
         }
 
+        $occurredAt = $at
+            ?? self::now();
+
         $this->status =
             OutboundMessageStatus::READY_FOR_SUBMISSION;
 
-        $this->readyForSubmissionAt = $at
-            ?? new DateTimeImmutable(
-                'now',
-                new DateTimeZone('UTC'),
-            );
+        $this->readyForSubmissionAt =
+            $occurredAt;
+
+        $this->recordEvent(
+            OutboundMessageStatus::READY_FOR_SUBMISSION,
+            $occurredAt,
+        );
     }
 
     /**
@@ -186,14 +225,19 @@ final class OutboundMessage
             );
         }
 
+        $occurredAt = $at
+            ?? self::now();
+
         $this->status =
             OutboundMessageStatus::SUBMITTING;
 
-        $this->submittingAt = $at
-            ?? new DateTimeImmutable(
-                'now',
-                new DateTimeZone('UTC'),
-            );
+        $this->submittingAt =
+            $occurredAt;
+
+        $this->recordEvent(
+            OutboundMessageStatus::SUBMITTING,
+            $occurredAt,
+        );
     }
 
     /**
@@ -220,14 +264,19 @@ final class OutboundMessage
             );
         }
 
+        $occurredAt = $at
+            ?? self::now();
+
         $this->status =
             OutboundMessageStatus::SUBMISSION_UNCERTAIN;
 
-        $this->submissionUncertainAt = $at
-            ?? new DateTimeImmutable(
-                'now',
-                new DateTimeZone('UTC'),
-            );
+        $this->submissionUncertainAt =
+            $occurredAt;
+
+        $this->recordEvent(
+            OutboundMessageStatus::SUBMISSION_UNCERTAIN,
+            $occurredAt,
+        );
     }
 
     public function markSubmitted(
@@ -256,13 +305,39 @@ final class OutboundMessage
             );
         }
 
+        $occurredAt = $at
+            ?? self::now();
+
         $this->status =
             OutboundMessageStatus::SUBMITTED;
 
-        $this->submittedAt = $at
-            ?? new DateTimeImmutable(
-                'now',
-                new DateTimeZone('UTC'),
-            );
+        $this->submittedAt =
+            $occurredAt;
+
+        $this->recordEvent(
+            OutboundMessageStatus::SUBMITTED,
+            $occurredAt,
+        );
+    }
+
+    private function recordEvent(
+        OutboundMessageStatus $type,
+        DateTimeImmutable $occurredAt,
+    ): void {
+        $this->events->add(
+            new OutboundMessageEvent(
+                $this,
+                $type,
+                $occurredAt,
+            ),
+        );
+    }
+
+    private static function now(): DateTimeImmutable
+    {
+        return new DateTimeImmutable(
+            'now',
+            new DateTimeZone('UTC'),
+        );
     }
 }

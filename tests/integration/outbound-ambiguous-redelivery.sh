@@ -18,6 +18,7 @@ TMP_DIR="$(
 )"
 
 OUTBOUND_ID=""
+SENDER_EMAIL=""
 
 cleanup() {
     RESULT=$?
@@ -29,6 +30,7 @@ cleanup() {
         docker compose exec \
             -T \
             -e OUTBOUND_ID="$OUTBOUND_ID" \
+            -e SENDER_EMAIL="${SENDER_EMAIL:-}" \
             api \
             php <<'PHP' >/dev/null 2>&1
 <?php
@@ -123,6 +125,22 @@ $deleteMessage =
 $deleteMessage->execute([
     'id' => $id,
 ]);
+
+$email = getenv('SENDER_EMAIL');
+
+if (
+    is_string($email)
+    && $email !== ''
+) {
+    $deleteSender =
+        $pdo->prepare(
+            'DELETE FROM sender_identity WHERE email = :email',
+        );
+
+    $deleteSender->execute([
+        'email' => $email,
+    ]);
+}
 PHP
     fi
 
@@ -219,22 +237,126 @@ PY
 
 MARKER="HEYMAIL-AMBIGUOUS-$TOKEN"
 IDEMPOTENCY_KEY="ambiguous-$TOKEN"
+SENDER_EMAIL="ambiguous-$TOKEN@heymail.test"
+
+docker compose exec \
+    -T \
+    -e SENDER_EMAIL="$SENDER_EMAIL" \
+    api \
+    php <<'PHP'
+<?php
+
+declare(strict_types=1);
+
+$email = getenv('SENDER_EMAIL');
+
+if (
+    !is_string($email)
+    || $email === ''
+) {
+    fwrite(
+        STDERR,
+        "Invalid sender fixture email.\n",
+    );
+
+    exit(1);
+}
+
+$pdo = new PDO(
+    sprintf(
+        'pgsql:host=%s;port=%s;dbname=%s',
+        getenv('DB_HOST'),
+        getenv('DB_PORT'),
+        getenv('DB_NAME'),
+    ),
+    getenv('DB_USER'),
+    trim(
+        file_get_contents(
+            (string) getenv('DB_PASSWORD_FILE'),
+        ),
+    ),
+    [
+        PDO::ATTR_ERRMODE
+            => PDO::ERRMODE_EXCEPTION,
+    ],
+);
+
+$domain =
+    $pdo->query(
+        <<<'SQL'
+SELECT id
+FROM sending_domain
+WHERE domain = 'heymail.test'
+  AND status = 'verified'
+  AND dkim_selector IS NOT NULL
+  AND dkim_public_key IS NOT NULL
+  AND dkim_provisioned_at IS NOT NULL
+LIMIT 1
+SQL
+    )
+    ->fetchColumn();
+
+if (
+    !is_string($domain)
+    && !is_int($domain)
+) {
+    fwrite(
+        STDERR,
+        "heymail.test is not verified and DKIM-ready.\n",
+    );
+
+    exit(1);
+}
+
+$createdAt =
+    (new DateTimeImmutable(
+        'now',
+        new DateTimeZone('UTC'),
+    ))
+    ->format('Y-m-d H:i:s');
+
+$insert =
+    $pdo->prepare(
+        <<<'SQL'
+INSERT INTO sender_identity (
+    sending_domain_id,
+    email,
+    created_at
+)
+VALUES (
+    :domain_id,
+    :email,
+    :created_at
+)
+ON CONFLICT (email) DO NOTHING
+SQL
+    );
+
+$insert->execute([
+    'domain_id' => $domain,
+    'email' => $email,
+    'created_at' => $createdAt,
+]);
+PHP
+
+pass "exact sender identity fixture is authorized"
 
 PAYLOAD="$TMP_DIR/payload.json"
 
 python3 \
-    - "$MARKER" \
+    - "$SENDER_EMAIL" "$MARKER" \
     > "$PAYLOAD" <<'PY'
 import json
 import sys
 
-marker = sys.argv[1]
+sender = sys.argv[1]
+marker = sys.argv[2]
 
 print(
     json.dumps(
         {
             "from": {
-                "email": "sender@heymail.test",
+                "email": sender,
                 "name": "HeyMail",
             },
             "to": [
@@ -312,39 +434,108 @@ $pdo = new PDO(
 
 $id = getenv('OUTBOUND_ID');
 
-$update =
-    $pdo->prepare(
+$pdo->beginTransaction();
+
+try {
+    $message = $pdo->prepare(
+        <<<'SQL'
+SELECT status
+FROM outbound_message
+WHERE id = :id
+FOR UPDATE
+SQL
+    );
+
+    $message->execute([
+        'id' => $id,
+    ]);
+
+    if ($message->fetchColumn() !== 'queued') {
+        throw new RuntimeException(
+            'Outbound message is not QUEUED.',
+        );
+    }
+
+    $readyAt =
+        (new DateTimeImmutable(
+            'now',
+            new DateTimeZone('UTC'),
+        ))
+        ->format('Y-m-d H:i:s');
+
+    $submittingAt =
+        (new DateTimeImmutable(
+            'now',
+            new DateTimeZone('UTC'),
+        ))
+        ->format('Y-m-d H:i:s');
+
+    $update = $pdo->prepare(
         <<<'SQL'
 UPDATE outbound_message
-SET status = 'submitting'
+SET
+    status = 'submitting',
+    ready_for_submission_at = :ready_at,
+    submitting_at = :submitting_at
 WHERE id = :id
   AND status = 'queued'
 SQL
     );
 
-$update->execute([
-    'id' => $id,
-]);
+    $update->execute([
+        'id' => $id,
+        'ready_at' => $readyAt,
+        'submitting_at' => $submittingAt,
+    ]);
 
-if ($update->rowCount() !== 1) {
+    if ($update->rowCount() !== 1) {
+        throw new RuntimeException(
+            'Unable to persist SUBMITTING state.',
+        );
+    }
+
+    $event = $pdo->prepare(
+        <<<'SQL'
+INSERT INTO outbound_message_event (
+    outbound_message_id,
+    event_type,
+    occurred_at
+)
+VALUES (
+    :id,
+    :event_type,
+    :occurred_at
+)
+SQL
+    );
+
+    $event->execute([
+        'id' => $id,
+        'event_type' => 'ready_for_submission',
+        'occurred_at' => $readyAt,
+    ]);
+
+    $event->execute([
+        'id' => $id,
+        'event_type' => 'submitting',
+        'occurred_at' => $submittingAt,
+    ]);
+
+    $pdo->commit();
+
+    echo 'submitting';
+} catch (Throwable $exception) {
+    if ($pdo->inTransaction()) {
+        $pdo->rollBack();
+    }
+
     fwrite(
         STDERR,
-        "Unable to simulate durable SUBMITTING state.\n",
+        $exception->getMessage() . PHP_EOL,
     );
 
     exit(1);
 }
-
-$query =
-    $pdo->prepare(
-        'SELECT status FROM outbound_message WHERE id = :id',
-    );
-
-$query->execute([
-    'id' => $id,
-]);
-
-echo $query->fetchColumn();
 PHP
 )"
 
@@ -352,7 +543,6 @@ PHP
     || fail "database did not persist SUBMITTING"
 
 pass "simulated crash state is durably SUBMITTING"
-
 docker compose start \
     mail-worker \
     >/dev/null
@@ -394,6 +584,60 @@ done
     || fail "redelivery did not become SUBMISSION_UNCERTAIN"
 
 pass "redelivery became SUBMISSION_UNCERTAIN"
+
+TIMELINE="$(
+    docker compose exec \
+        -T \
+        -e OUTBOUND_ID="$OUTBOUND_ID" \
+        api \
+        php <<'PHP'
+<?php
+
+declare(strict_types=1);
+
+$pdo = new PDO(
+    sprintf(
+        'pgsql:host=%s;port=%s;dbname=%s',
+        getenv('DB_HOST'),
+        getenv('DB_PORT'),
+        getenv('DB_NAME'),
+    ),
+    getenv('DB_USER'),
+    trim(
+        file_get_contents(
+            (string) getenv('DB_PASSWORD_FILE'),
+        ),
+    ),
+    [
+        PDO::ATTR_ERRMODE
+            => PDO::ERRMODE_EXCEPTION,
+    ],
+);
+
+$stmt = $pdo->prepare(
+    <<<'SQL'
+SELECT event_type
+FROM outbound_message_event
+WHERE outbound_message_id = :id
+ORDER BY occurred_at ASC, id ASC
+SQL
+);
+
+$stmt->execute([
+    'id' => getenv('OUTBOUND_ID'),
+]);
+
+echo implode(
+    '>',
+    $stmt->fetchAll(PDO::FETCH_COLUMN),
+);
+PHP
+)"
+
+[ "$TIMELINE" = "queued>ready_for_submission>submitting>submission_uncertain" ] \
+    || fail "unexpected uncertain submission timeline: $TIMELINE"
+
+pass "ambiguous redelivery persists the complete immutable event timeline"
 
 if docker compose exec -T fake-mx-success \
     grep -aF \
