@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Entity;
 
+use App\Enum\OutboundMessageEventType;
 use App\Enum\OutboundMessageStatus;
 use DateTimeImmutable;
 use DateTimeZone;
@@ -121,7 +122,7 @@ final class OutboundMessage
             new ArrayCollection();
 
         $this->recordEvent(
-            OutboundMessageStatus::QUEUED,
+            OutboundMessageEventType::QUEUED,
             $this->createdAt,
         );
     }
@@ -196,7 +197,7 @@ final class OutboundMessage
             $occurredAt;
 
         $this->recordEvent(
-            OutboundMessageStatus::READY_FOR_SUBMISSION,
+            OutboundMessageEventType::READY_FOR_SUBMISSION,
             $occurredAt,
         );
     }
@@ -235,7 +236,7 @@ final class OutboundMessage
             $occurredAt;
 
         $this->recordEvent(
-            OutboundMessageStatus::SUBMITTING,
+            OutboundMessageEventType::SUBMITTING,
             $occurredAt,
         );
     }
@@ -274,7 +275,7 @@ final class OutboundMessage
             $occurredAt;
 
         $this->recordEvent(
-            OutboundMessageStatus::SUBMISSION_UNCERTAIN,
+            OutboundMessageEventType::SUBMISSION_UNCERTAIN,
             $occurredAt,
         );
     }
@@ -315,13 +316,84 @@ final class OutboundMessage
             $occurredAt;
 
         $this->recordEvent(
-            OutboundMessageStatus::SUBMITTED,
+            OutboundMessageEventType::SUBMITTED,
             $occurredAt,
         );
     }
 
+    public function recordDeliveryFeedback(
+        OutboundMessageEventType $type,
+        string $recipientHash,
+        string $smtpStatus,
+        string $detail,
+        string $sourceEventId,
+        ?DateTimeImmutable $at = null,
+    ): void {
+        if (!$type->isDelivery()) {
+            throw new InvalidArgumentException(
+                'Expected a delivery event type.',
+            );
+        }
+
+        foreach ($this->events as $event) {
+            if (
+                $event->getSourceEventId()
+                === $sourceEventId
+            ) {
+                return;
+            }
+        }
+
+        $occurredAt = $at
+            ?? self::now();
+
+        /*
+         * Postfix delivery evidence proves that the message crossed
+         * the local submission boundary even if the worker crashed
+         * before persisting SUBMITTED.
+         */
+        if (
+            $this->status
+            === OutboundMessageStatus::SUBMITTING
+            || $this->status
+            === OutboundMessageStatus::SUBMISSION_UNCERTAIN
+        ) {
+            $this->status =
+                OutboundMessageStatus::SUBMITTED;
+
+            $this->submittedAt ??=
+                $occurredAt;
+
+            $this->recordEvent(
+                OutboundMessageEventType::SUBMITTED,
+                $occurredAt,
+            );
+        }
+
+        if (
+            $this->status
+            !== OutboundMessageStatus::SUBMITTED
+        ) {
+            throw new LogicException(
+                'Delivery feedback requires a submitted outbound message.',
+            );
+        }
+
+        $this->events->add(
+            new OutboundMessageEvent(
+                outboundMessage: $this,
+                type: $type,
+                occurredAt: $occurredAt,
+                recipientHash: $recipientHash,
+                smtpStatus: $smtpStatus,
+                detail: $detail,
+                sourceEventId: $sourceEventId,
+            ),
+        );
+    }
+
     private function recordEvent(
-        OutboundMessageStatus $type,
+        OutboundMessageEventType $type,
         DateTimeImmutable $occurredAt,
     ): void {
         $this->events->add(

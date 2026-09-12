@@ -27,6 +27,10 @@ services:
     App\Mail\OutboundMessageSubmitter:
         alias: App\Mail\SymfonyMailerOutboundMessageSubmitter
 
+    App\Mail\PostfixDeliveryLogParser:
+        arguments:
+            $bounceDomain: '%env(string:HEYMAIL_BOUNCE_DOMAIN)%'
+
     App\Api\ApiCredentials:
         arguments:
             $apiKeyFile: '%env(string:HEYMAIL_API_KEY_FILE)%'

@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace App\Tests\Entity;
 
 use App\Entity\OutboundMessage;
-use App\Enum\OutboundMessageStatus;
+use App\Enum\OutboundMessageEventType;
 use DateTimeImmutable;
 use PHPUnit\Framework\TestCase;
 
@@ -25,7 +25,7 @@ final class OutboundMessageEventTest extends TestCase
         );
 
         self::assertSame(
-            OutboundMessageStatus::QUEUED,
+            OutboundMessageEventType::QUEUED,
             $events[0]->getType(),
         );
 
@@ -77,10 +77,10 @@ final class OutboundMessageEventTest extends TestCase
 
         self::assertSame(
             [
-                OutboundMessageStatus::QUEUED,
-                OutboundMessageStatus::READY_FOR_SUBMISSION,
-                OutboundMessageStatus::SUBMITTING,
-                OutboundMessageStatus::SUBMITTED,
+                OutboundMessageEventType::QUEUED,
+                OutboundMessageEventType::READY_FOR_SUBMISSION,
+                OutboundMessageEventType::SUBMITTING,
+                OutboundMessageEventType::SUBMITTED,
             ],
             array_map(
                 static fn ($event) =>
@@ -150,10 +150,10 @@ final class OutboundMessageEventTest extends TestCase
 
         self::assertSame(
             [
-                OutboundMessageStatus::QUEUED,
-                OutboundMessageStatus::READY_FOR_SUBMISSION,
-                OutboundMessageStatus::SUBMITTING,
-                OutboundMessageStatus::SUBMISSION_UNCERTAIN,
+                OutboundMessageEventType::QUEUED,
+                OutboundMessageEventType::READY_FOR_SUBMISSION,
+                OutboundMessageEventType::SUBMITTING,
+                OutboundMessageEventType::SUBMISSION_UNCERTAIN,
             ],
             array_map(
                 static fn ($event) =>

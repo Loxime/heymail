@@ -292,6 +292,78 @@ services:
 
 
   # =========================================================================
+  # Postfix delivery feedback observer
+  #
+  # Reads only the dedicated Postfix log volume and persists delivery events.
+  # It has database access but no SMTP, filter, DNS or gateway network.
+  # =========================================================================
+
+  delivery-observer:
+    image: heymail-api:local
+
+    restart: unless-stopped
+
+    user: "${HEYMAIL_UID:?HEYMAIL_UID is required}:${HEYMAIL_GID:?HEYMAIL_GID is required}"
+
+    environment:
+      APP_ENV: prod
+      APP_DEBUG: "0"
+      DEFAULT_URI: "https://api.heymail.test"
+      APP_RUNTIME_OPTIONS: '{"disable_dotenv":true}'
+      APP_SECRET_FILE: /run/secrets/app_secret
+      MAILER_DSN: "null://null"
+      HEYMAIL_BOUNCE_DOMAIN: "heymail.test"
+
+      DB_HOST: database
+      DB_PORT: "5432"
+      DB_NAME: ${POSTGRES_DB:?POSTGRES_DB is required}
+      DB_USER: heymail_app
+      DB_PASSWORD_FILE: /run/secrets/postgres_app_password
+
+    secrets:
+      - app_secret
+      - postgres_app_password
+
+    volumes:
+      - postfix_logs:/var/log/postfix:ro
+
+    networks:
+      - data_net
+
+    depends_on:
+      database:
+        condition: service_healthy
+
+      database-bootstrap:
+        condition: service_completed_successfully
+
+      postfix:
+        condition: service_healthy
+
+    read_only: true
+
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+      - /app/var:size=32m,mode=0770,uid=${HEYMAIL_UID},gid=${HEYMAIL_GID}
+
+    security_opt:
+      - no-new-privileges:true
+
+    cap_drop:
+      - ALL
+
+    pids_limit: 50
+    mem_limit: 192m
+    cpus: 0.25
+
+    command:
+      - php
+      - bin/console
+      - app:observe-postfix-delivery
+      - --file=/var/log/postfix/heymail.log
+
+
+  # =========================================================================
   # Sending-domain DNS ownership worker
   #
   # Consumes only DNS verification jobs.
@@ -743,6 +815,7 @@ services:
     volumes:
       - postfix_queue:/var/spool/postfix
       - postfix_data:/var/lib/postfix
+      - postfix_logs:/var/log/postfix
 
     security_opt:
       - no-new-privileges:true
@@ -1105,6 +1178,9 @@ volumes:
 
   postfix_data:
     name: heymail_postfix_data
+
+  postfix_logs:
+    name: heymail_postfix_logs
 
   rspamd_dkim_private:
     name: heymail_rspamd_dkim_private

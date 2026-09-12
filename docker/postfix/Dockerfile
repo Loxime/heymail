@@ -47,7 +47,8 @@ RUN set -eux; \
     postconf -e 'maximal_queue_lifetime = 5m'; \
     postconf -e 'bounce_queue_lifetime = 5m'; \
     \
-    postconf -e 'maillog_file = /dev/stdout'; \
+    postconf -e 'maillog_file = /var/log/postfix/heymail.log'; \
+    postconf -e 'maillog_file_permissions = 0644'; \
     \
     sed -i \
         -E '/^[[:space:]]*smtp[[:space:]]+inet[[:space:]]/s/^/#/' \
@@ -92,6 +93,9 @@ COPY docker/postfix/healthcheck.sh \
     /usr/local/bin/heymail-postfix-healthcheck
 
 RUN set -eux; \
+    mkdir -p /var/log/postfix; \
+    : > /var/log/postfix/heymail.log; \
+    chmod 0644 /var/log/postfix/heymail.log; \
     newaliases; \
     test -f /etc/postfix/aliases.lmdb; \
     chmod 0444 /etc/postfix/transport.pcre; \
