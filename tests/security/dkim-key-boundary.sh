@@ -78,6 +78,7 @@ print("\n".join(consumers))
 
 EXPECTED_DKIM_CONSUMERS="$(
     printf '%s\n' \
+        dkim-provisioner \
         rspamd \
         rspamd-dkim-bootstrap
 )"
@@ -90,7 +91,7 @@ EXPECTED_DKIM_CONSUMERS="$(
     fail "unexpected service can access the private DKIM volume"
 }
 
-pass "only Rspamd and its bootstrap reference the private DKIM volume"
+pass "only DKIM provisioner, Rspamd and bootstrap reference the private DKIM volume"
 
 
 if python3 -c '
@@ -101,6 +102,7 @@ config = json.load(sys.stdin)
 services = config["services"]
 
 bootstrap = services["rspamd-dkim-bootstrap"]
+provisioner = services["dkim-provisioner"]
 rspamd = services["rspamd"]
 
 assert bootstrap["network_mode"] == "none"
@@ -117,6 +119,29 @@ bootstrap_private = [
 
 assert len(bootstrap_private) == 1
 
+assert str(provisioner["user"]) == "1000:101"
+assert provisioner["read_only"] is True
+assert provisioner.get("privileged", False) is False
+assert set(provisioner.get("cap_drop") or []) == {"ALL"}
+assert not (provisioner.get("cap_add") or [])
+
+assert "no-new-privileges:true" in (
+    provisioner.get("security_opt") or []
+)
+
+assert set(provisioner.get("networks") or []) == {
+    "data_net",
+}
+
+provisioner_private = [
+    volume
+    for volume in (provisioner.get("volumes") or [])
+    if volume.get("target") == "/run/heymail-dkim"
+]
+
+assert len(provisioner_private) == 1
+assert provisioner_private[0].get("read_only", False) is False
+
 rspamd_private = [
     volume
     for volume in (rspamd.get("volumes") or [])
@@ -127,7 +152,7 @@ assert len(rspamd_private) == 1
 assert rspamd_private[0].get("read_only") is True
 ' <<<"$COMPOSE_JSON"
 then
-    pass "Compose enforces the DKIM bootstrap and signer trust boundary"
+    pass "Compose enforces the DKIM provisioner, bootstrap and signer trust boundary"
 else
     fail "Compose DKIM trust boundary is not enforced"
 fi
@@ -244,48 +269,105 @@ pass "DKIM bootstrap is idempotent and does not rotate the key"
 
 # ---------------------------------------------------------------------------
 # Private volume contents and metadata
+#
+# The fixed heymail.test/lab fixture remains owner-readable by Rspamd.
+# Dynamic per-domain keys live one directory below the root and are shared
+# read-only with Rspamd through GID 101.
 # ---------------------------------------------------------------------------
 
 PRIVATE_METADATA="$(
-    docker run \
-        --rm \
-        --network none \
-        --read-only \
-        --cap-drop ALL \
-        --security-opt no-new-privileges:true \
-        -v "${PRIVATE_VOLUME}:/private:ro" \
-        "$ALPINE_IMAGE" \
+    docker compose exec -T dkim-provisioner \
         stat \
             -c '%u:%g:%a' \
-            "$PRIVATE_KEY"
+            /run/heymail-dkim/heymail.test.lab.key
 )"
 
 [ "$PRIVATE_METADATA" = "100:101:400" ] \
-    || fail "private DKIM key metadata is not 100:101:0400"
+    || fail "legacy private DKIM key metadata is not 100:101:0400"
 
-PRIVATE_FILES="$(
-    docker run \
-        --rm \
-        --network none \
-        --read-only \
-        --cap-drop ALL \
-        --security-opt no-new-privileges:true \
-        -v "${PRIVATE_VOLUME}:/private:ro" \
-        "$ALPINE_IMAGE" \
-        sh -lc '
-            find /private \
-              -mindepth 1 \
-              -maxdepth 1 \
-              -type f \
-              -print \
-              | sort
+pass "legacy private DKIM key remains restricted to Rspamd"
+
+
+TOP_LEVEL_PRIVATE_FILES="$(
+    docker compose exec -T dkim-provisioner \
+        sh -c '
+            find /run/heymail-dkim \
+                -mindepth 1 \
+                -maxdepth 1 \
+                -type f \
+                -print \
+                | sort
         '
 )"
 
-[ "$PRIVATE_FILES" = "$PRIVATE_KEY" ] \
-    || fail "private DKIM volume contains unexpected files"
+EXPECTED_TOP_LEVEL_PRIVATE_FILE="/run/heymail-dkim/heymail.test.lab.key"
 
-pass "private DKIM volume contains exactly one 100:101/0400 key"
+[ "$TOP_LEVEL_PRIVATE_FILES" = "$EXPECTED_TOP_LEVEL_PRIVATE_FILE" ] || {
+    printf 'Unexpected top-level DKIM private files:\n%s\n' \
+        "$TOP_LEVEL_PRIVATE_FILES" >&2
+
+    fail "private DKIM root contains unexpected files"
+}
+
+pass "private DKIM root contains only the fixed laboratory key"
+
+
+DYNAMIC_PRIVATE_METADATA="$(
+    docker compose exec -T dkim-provisioner \
+        sh -c '
+            find /run/heymail-dkim \
+                -mindepth 2 \
+                -maxdepth 2 \
+                -type f \
+                -name "*.key" \
+                -exec stat -c "%u:%g:%a %n" {} \; \
+                | sort
+        '
+)"
+
+BAD_DYNAMIC_PRIVATE_METADATA="$(
+    printf '%s\n' "$DYNAMIC_PRIVATE_METADATA" \
+        | awk '
+            NF > 0 && $1 != "1000:101:440" {
+                print
+            }
+        '
+)"
+
+[ -z "$BAD_DYNAMIC_PRIVATE_METADATA" ] || {
+    printf 'Unsafe dynamic DKIM private-key metadata:\n%s\n' \
+        "$BAD_DYNAMIC_PRIVATE_METADATA" >&2
+
+    fail "dynamic DKIM private key permissions are unsafe"
+}
+
+pass "all present dynamic DKIM keys are restricted to 1000:101/0440"
+
+
+PRIVATE_TEMP_FILES="$(
+    docker compose exec -T dkim-provisioner \
+        sh -c '
+            find /run/heymail-dkim \
+                -type f \
+                \( \
+                    -name "*.tmp" \
+                    -o -name "*.tmp.*" \
+                    -o -name ".*.tmp" \
+                    -o -name ".*.tmp.*" \
+                \) \
+                -print \
+                | sort
+        '
+)"
+
+[ -z "$PRIVATE_TEMP_FILES" ] || {
+    printf 'Unexpected staged DKIM files:\n%s\n' \
+        "$PRIVATE_TEMP_FILES" >&2
+
+    fail "staged DKIM private-key material remains in persistent storage"
+}
+
+pass "no staged DKIM private-key files remain"
 
 
 PUBLIC_MODE="$(
@@ -340,25 +422,36 @@ docker run \
 pass "private DKIM key is not baked into the Rspamd image"
 
 
-WORKTREE_PRIVATE_MATERIAL="$(
-    find . \
-        -path './.git' -prune -o \
-        -type f \
-        \( \
-          -name '*.key' \
-          -o -name '*.pem' \
-          -o -name '*.p12' \
-          -o -name '*.pfx' \
-        \) \
-        -print
+TRACKED_PRIVATE_MATERIAL="$(
+    git ls-files -z \
+        | while IFS= read -r -d '' FILE
+          do
+              case "$FILE" in
+                  *.key|*.p12|*.pfx)
+                      printf '%s\n' "$FILE"
+                      continue
+                      ;;
+              esac
+
+              [ -f "$FILE" ] \
+                  || continue
+
+              if grep -Eq \
+                  -- '^-----BEGIN ((RSA|EC|OPENSSH|DSA) )?PRIVATE KEY-----$|^-----BEGIN ENCRYPTED PRIVATE KEY-----$' \
+                  "$FILE" \
+                  2>/dev/null
+              then
+                  printf '%s\n' "$FILE"
+              fi
+          done
 )"
 
-[ -z "$WORKTREE_PRIVATE_MATERIAL" ] || {
-    printf '%s\n' "$WORKTREE_PRIVATE_MATERIAL" >&2
-    fail "private-key material exists in the Git worktree"
+[ -z "$TRACKED_PRIVATE_MATERIAL" ] || {
+    printf '%s\n' "$TRACKED_PRIVATE_MATERIAL" >&2
+    fail "private-key material is tracked by Git"
 }
 
-pass "private-key material is absent from the Git worktree"
+pass "private-key material is absent from tracked Git files"
 
 
 # ---------------------------------------------------------------------------
@@ -417,6 +510,13 @@ pass "Rspamd can read but cannot modify the private DKIM key"
 
 # ---------------------------------------------------------------------------
 # Effective Rspamd DKIM policy
+#
+# Global policy signs dynamically provisioned domains using:
+#
+#   /run/heymail-dkim/$domain/hm1.key
+#
+# The explicit heymail.test/lab entry remains only as the fixed historical
+# laboratory fixture.
 # ---------------------------------------------------------------------------
 
 OPTIONS="$(
@@ -431,6 +531,7 @@ grep -F \
     >/dev/null \
     || fail "DKIM is not the sole enabled C filter"
 
+
 DKIM_SIGNING="$(
     docker exec "$RSPAMD_CONTAINER" \
         rspamadm configdump dkim_signing \
@@ -438,19 +539,21 @@ DKIM_SIGNING="$(
 )"
 
 for EXPECTED_LINE in \
-    'allow_envfrom_empty = false;' \
+    'allow_envfrom_empty = true;' \
     'allow_hdrfrom_mismatch = false;' \
+    'allow_hdrfrom_mismatch_local = false;' \
+    'allow_hdrfrom_mismatch_sign_networks = false;' \
     'allow_hdrfrom_multiple = false;' \
     'allow_username_mismatch = false;' \
     'sign_authenticated = false;' \
     'sign_local = true;' \
-    'try_fallback = false;' \
+    'try_fallback = true;' \
     'use_domain = "header";' \
     'use_esld = false;' \
     'use_redis = false;' \
     'enabled = true;' \
-    'path = "/run/heymail-dkim/heymail.test.lab.key";' \
-    'selector = "lab";'
+    'selector = "hm1";' \
+    'path = "/run/heymail-dkim/$domain/$selector.key";'
 do
     grep -F \
         "$EXPECTED_LINE" \
@@ -459,13 +562,39 @@ do
         || fail "missing DKIM policy: ${EXPECTED_LINE}"
 done
 
+pass "Rspamd global DKIM policy uses dynamic per-domain key paths"
+
+
 grep -F \
     'heymail.test {' \
     <<<"$DKIM_SIGNING" \
     >/dev/null \
-    || fail "heymail.test DKIM domain is missing"
+    || fail "legacy heymail.test DKIM fixture is missing"
 
-pass "Rspamd effective DKIM signing policy is constrained as expected"
+grep -F \
+    'path = "/run/heymail-dkim/heymail.test.lab.key";' \
+    <<<"$DKIM_SIGNING" \
+    >/dev/null \
+    || fail "legacy heymail.test private-key path is missing"
+
+grep -F \
+    'selector = "lab";' \
+    <<<"$DKIM_SIGNING" \
+    >/dev/null \
+    || fail "legacy heymail.test selector is missing"
+
+pass "legacy heymail.test/lab fixture remains explicitly isolated"
+
+
+if grep -F \
+    'path = "/run/heymail-dkim/heymail.test.lab.key";' \
+    <<<"$DKIM_SIGNING" \
+    | grep -Fq '$domain'
+then
+    fail "legacy DKIM fixture leaked into dynamic key template"
+fi
+
+pass "dynamic and legacy DKIM key-selection policies remain distinct"
 
 
 # ---------------------------------------------------------------------------

@@ -7,12 +7,14 @@ namespace App\MessageHandler;
 use App\Entity\SendingDomain;
 use App\Enum\SendingDomainStatus;
 use App\Mail\DomainOwnershipVerifier;
+use App\Message\ProvisionSendingDomainDkim;
 use App\Message\VerifySendingDomain;
 use DateTimeImmutable;
 use DateTimeZone;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\Messenger\Attribute\AsMessageHandler;
 use Symfony\Component\Messenger\Exception\UnrecoverableMessageHandlingException;
+use Symfony\Component\Messenger\MessageBusInterface;
 
 #[AsMessageHandler]
 final readonly class VerifySendingDomainHandler
@@ -20,6 +22,7 @@ final readonly class VerifySendingDomainHandler
     public function __construct(
         private EntityManagerInterface $entityManager,
         private DomainOwnershipVerifier $verifier,
+        private MessageBusInterface $messageBus,
     ) {
     }
 
@@ -51,10 +54,23 @@ final readonly class VerifySendingDomainHandler
 
         if (
             $status
-            === SendingDomainStatus::VERIFIED
-            || $status
             === SendingDomainStatus::DISABLED
         ) {
+            return;
+        }
+
+        if (
+            $status
+            === SendingDomainStatus::VERIFIED
+        ) {
+            if (
+                !$domain->isDkimReady()
+            ) {
+                $this->queueDkimProvisioning(
+                    $domain,
+                );
+            }
+
             return;
         }
 
@@ -75,14 +91,56 @@ final readonly class VerifySendingDomainHandler
                 ->markVerified(
                     $checkedAt,
                 );
-        } else {
-            $domain
-                ->markVerificationChecked(
-                    $checkedAt,
-                );
+
+            /*
+             * Persist VERIFIED before creating the DKIM job.
+             *
+             * On a dispatch failure, Messenger retries this verification
+             * job. The VERIFIED branch above then queues provisioning
+             * again, making the transition recoverable.
+             */
+            $this->entityManager
+                ->flush();
+
+            $this->queueDkimProvisioning(
+                $domain,
+            );
+
+            return;
         }
+
+        $domain
+            ->markVerificationChecked(
+                $checkedAt,
+            );
 
         $this->entityManager
             ->flush();
+    }
+
+    private function queueDkimProvisioning(
+        SendingDomain $domain,
+    ): void {
+        $domainId =
+            $domain->getId();
+
+        if (
+            !is_int(
+                $domainId,
+            )
+            || $domainId < 1
+        ) {
+            throw new UnrecoverableMessageHandlingException(
+                'Persisted sending domain has no valid identifier.',
+            );
+        }
+
+        $this
+            ->messageBus
+            ->dispatch(
+                new ProvisionSendingDomainDkim(
+                    $domainId,
+                ),
+            );
     }
 }

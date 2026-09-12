@@ -6,6 +6,7 @@ namespace App\Controller;
 
 use App\Api\ApiCredentials;
 use App\Entity\SenderIdentity;
+use App\Mail\SenderDomainNotReadyException;
 use App\Mail\SenderDomainNotVerifiedException;
 use App\Mail\SenderIdentityRegistrationService;
 use Doctrine\ORM\EntityManagerInterface;
@@ -112,6 +113,12 @@ final readonly class SenderIdentityController
             return self::error(
                 'sending_domain_not_verified',
                 'Sender domain must be verified before registering the sender.',
+                Response::HTTP_CONFLICT,
+            );
+        } catch (SenderDomainNotReadyException) {
+            return self::error(
+                'sending_domain_not_ready',
+                'Sender domain DKIM must be provisioned before registering the sender.',
                 Response::HTTP_CONFLICT,
             );
         } catch (InvalidArgumentException $exception) {

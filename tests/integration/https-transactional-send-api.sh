@@ -300,10 +300,55 @@ docker compose stop \
     mail-worker \
     >/dev/null
 
+LEGACY_DKIM_PUBLIC_KEY="$(
+    docker compose run \
+        --rm \
+        --no-deps \
+        -T \
+        --entrypoint python3 \
+        dkim-verifier \
+        - <<'PY_DKIM'
+import re
+
+from pathlib import Path
+
+text = Path(
+    "/public/heymail.test.lab.dns.txt"
+).read_text(
+    encoding="ascii"
+)
+
+record = "".join(
+    re.findall(
+        r'"([^"]*)"',
+        text,
+    )
+)
+
+match = re.search(
+    r"(?:^|;\s*)p=([^;\s]+)",
+    record,
+)
+
+if match is None:
+    raise SystemExit(
+        "legacy DKIM public key not found"
+    )
+
+print(
+    match.group(1)
+)
+PY_DKIM
+)"
+
+[ -n "$LEGACY_DKIM_PUBLIC_KEY" ] \
+    || fail "legacy DKIM public key is empty"
+
 docker compose exec \
     -T \
     -e SENDER_DOMAIN="$SENDER_DOMAIN" \
     -e SENDER_EMAIL="$SENDER_EMAIL" \
+    -e DKIM_PUBLIC_KEY="$LEGACY_DKIM_PUBLIC_KEY" \
     api \
     php <<'PHP'
 <?php
@@ -312,12 +357,15 @@ declare(strict_types=1);
 
 $domain = getenv('SENDER_DOMAIN');
 $email = getenv('SENDER_EMAIL');
+$dkimPublicKey = getenv('DKIM_PUBLIC_KEY');
 
 if (
     !is_string($domain)
     || $domain === ''
     || !is_string($email)
     || $email === ''
+    || !is_string($dkimPublicKey)
+    || $dkimPublicKey === ''
 ) {
     exit(1);
 }
@@ -365,7 +413,10 @@ INSERT INTO sending_domain (
     created_at,
     verification_checked_at,
     verified_at,
-    disabled_at
+    disabled_at,
+    dkim_selector,
+    dkim_public_key,
+    dkim_provisioned_at
 )
 VALUES (
     :domain,
@@ -374,14 +425,20 @@ VALUES (
     :created_at,
     :verified_at,
     :verified_at,
-    NULL
+    NULL,
+    'lab',
+    :dkim_public_key,
+    :verified_at
 )
 ON CONFLICT (domain) DO UPDATE
 SET
     status = 'verified',
     verification_checked_at = EXCLUDED.verification_checked_at,
     verified_at = EXCLUDED.verified_at,
-    disabled_at = NULL
+    disabled_at = NULL,
+    dkim_selector = 'lab',
+    dkim_public_key = EXCLUDED.dkim_public_key,
+    dkim_provisioned_at = EXCLUDED.dkim_provisioned_at
 RETURNING id
 SQL
     );
@@ -391,6 +448,8 @@ $domainInsert->execute([
     'token' => $token,
     'created_at' => $now,
     'verified_at' => $now,
+    'dkim_public_key'
+        => $dkimPublicKey,
 ]);
 
 $domainId =

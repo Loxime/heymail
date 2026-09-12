@@ -8,6 +8,7 @@ use App\Api\ApiCredentials;
 use App\Entity\SendingDomain;
 use App\Enum\SendingDomainStatus;
 use App\Mail\SendingDomainRegistrationService;
+use App\Message\ProvisionSendingDomainDkim;
 use App\Message\VerifySendingDomain;
 use Doctrine\ORM\EntityManagerInterface;
 use InvalidArgumentException;
@@ -286,6 +287,101 @@ final readonly class SendingDomainController
         );
     }
 
+    #[Route(
+        '/api/v1/domains/{id}/dkim/provision',
+        name: 'api_v1_domain_dkim_provision',
+        requirements: [
+            'id' => '[1-9][0-9]*',
+        ],
+        methods: ['POST'],
+    )]
+    public function provisionDkim(
+        Request $request,
+        string $id,
+    ): JsonResponse {
+        if (
+            !$this->credentials->authorizes(
+                $request,
+            )
+        ) {
+            return self::unauthorized();
+        }
+
+        $domain =
+            $this->findDomain(
+                $id,
+            );
+
+        if (
+            !$domain
+            instanceof SendingDomain
+        ) {
+            return self::error(
+                'domain_not_found',
+                'Sending domain was not found.',
+                Response::HTTP_NOT_FOUND,
+            );
+        }
+
+        if (
+            $domain->getStatus()
+            !== SendingDomainStatus::VERIFIED
+        ) {
+            return self::error(
+                'domain_not_verified',
+                'DKIM can only be provisioned for a verified sending domain.',
+                Response::HTTP_CONFLICT,
+            );
+        }
+
+        $document =
+            self::serializeDomain(
+                $domain,
+            );
+
+        if (
+            $domain->isDkimReady()
+        ) {
+            $document['dkimProvisioningQueued'] =
+                false;
+
+            return new JsonResponse(
+                $document,
+                Response::HTTP_OK,
+            );
+        }
+
+        $domainId =
+            $domain->getId();
+
+        if (
+            !is_int(
+                $domainId,
+            )
+            || $domainId < 1
+        ) {
+            throw new RuntimeException(
+                'Persisted sending domain has no valid identifier.',
+            );
+        }
+
+        $this
+            ->messageBus
+            ->dispatch(
+                new ProvisionSendingDomainDkim(
+                    $domainId,
+                ),
+            );
+
+        $document['dkimProvisioningQueued'] =
+            true;
+
+        return new JsonResponse(
+            $document,
+            Response::HTTP_ACCEPTED,
+        );
+    }
+
     private function findDomain(
         string $id,
     ): ?SendingDomain {
@@ -328,6 +424,14 @@ final readonly class SendingDomainController
      *         name: string,
      *         value: string
      *     },
+     *     dkim: array{
+     *         ready: bool,
+     *         selector: ?string,
+     *         type: string,
+     *         name: ?string,
+     *         value: ?string,
+     *         provisionedAt: ?string
+     *     },
      *     createdAt: string,
      *     verificationCheckedAt: ?string,
      *     verifiedAt: ?string,
@@ -366,6 +470,25 @@ final readonly class SendingDomainController
                 'value'
                     => $domain
                         ->getVerificationRecordValue(),
+            ],
+            'dkim' => [
+                'ready'
+                    => $domain
+                        ->isDkimReady(),
+                'selector'
+                    => $domain
+                        ->getDkimSelector(),
+                'type' => 'TXT',
+                'name'
+                    => $domain
+                        ->getDkimRecordName(),
+                'value'
+                    => $domain
+                        ->getDkimRecordValue(),
+                'provisionedAt'
+                    => $domain
+                        ->getDkimProvisionedAt()
+                        ?->format(DATE_ATOM),
             ],
             'createdAt'
                 => $domain

@@ -5,6 +5,9 @@ parameters:
     env(DNS_VERIFY_PORT): '8053'
     env(DNS_VERIFY_TIMEOUT_MS): '2000'
 
+    env(DKIM_PRIVATE_DIRECTORY): '/run/heymail-dkim'
+    env(DKIM_SELECTOR): 'hm1'
+
 services:
     _defaults:
         autowire: true
@@ -37,3 +40,8 @@ services:
 
     App\Mail\TxtRecordResolver:
         alias: App\Mail\UdpDnsTxtRecordResolver
+
+    App\Mail\DkimKeyProvisioner:
+        arguments:
+            $privateDirectory: '%env(string:DKIM_PRIVATE_DIRECTORY)%'
+            $selector: '%env(string:DKIM_SELECTOR)%'

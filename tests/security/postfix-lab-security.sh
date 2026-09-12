@@ -46,6 +46,7 @@ NETWORKS="$(
 EXPECTED_NETWORKS="$(
     printf '%s\n' \
         heymail_filter \
+        heymail_mail \
         heymail_smtp_lab \
         | sort
 )"
@@ -53,9 +54,9 @@ EXPECTED_NETWORKS="$(
 [ "$NETWORKS" = "$EXPECTED_NETWORKS" ] \
     || fail "unexpected Postfix networks: $NETWORKS"
 
-pass "Postfix belongs only to smtp_lab_net and filter_net"
+pass "Postfix belongs only to smtp_lab_net, filter_net and mail_net"
 
-for NETWORK in heymail_filter heymail_smtp_lab
+for NETWORK in heymail_filter heymail_mail heymail_smtp_lab
 do
     INTERNAL="$(
         docker network inspect "$NETWORK" \

@@ -81,6 +81,7 @@ docker compose up \
     --wait \
     fake-dns \
     domain-verifier \
+    dkim-provisioner \
     gateway \
     >/dev/null
 
@@ -212,6 +213,42 @@ done
     || fail "domain did not become VERIFIED"
 
 pass "domain ownership verified"
+
+DKIM_READY="false"
+
+for _ in $(seq 1 60)
+do
+    curl_auth \
+        --output "$GET_BODY" \
+        "${BASE_URL}/api/v1/domains/${DOMAIN_ID}"
+
+    DKIM_READY="$(
+        python3 \
+            - "$GET_BODY" <<'PY_DKIM'
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as handle:
+    data = json.load(handle)
+
+print(
+    "true"
+    if data["dkim"]["ready"] is True
+    else "false"
+)
+PY_DKIM
+    )"
+
+    [ "$DKIM_READY" = "true" ] \
+        && break
+
+    sleep 1
+done
+
+[ "$DKIM_READY" = "true" ] \
+    || fail "verified domain did not become DKIM-ready"
+
+pass "verified domain receives per-domain DKIM material"
 
 UNAUTHORIZED_PAYLOAD="$(
     python3 \

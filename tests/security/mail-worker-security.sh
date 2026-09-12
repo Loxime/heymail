@@ -112,7 +112,7 @@ required_command_parts = {
     "outbound",
     "--time-limit=3600",
     "--memory-limit=192M",
-    "--sleep=1000",
+    "--sleep=1",
     "--no-interaction",
 }
 

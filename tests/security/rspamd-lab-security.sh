@@ -616,6 +616,7 @@ if [ -n "$POSTFIX_CONTAINER" ]; then
     EXPECTED_POSTFIX_NETWORKS="$(
         printf '%s\n' \
             heymail_filter \
+            heymail_mail \
             heymail_smtp_lab \
             | sort
     )"

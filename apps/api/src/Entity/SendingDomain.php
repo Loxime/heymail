@@ -73,6 +73,28 @@ final class SendingDomain
     )]
     private ?DateTimeImmutable $disabledAt = null;
 
+    #[ORM\Column(
+        name: 'dkim_selector',
+        type: Types::STRING,
+        length: 63,
+        nullable: true,
+    )]
+    private ?string $dkimSelector = null;
+
+    #[ORM\Column(
+        name: 'dkim_public_key',
+        type: Types::TEXT,
+        nullable: true,
+    )]
+    private ?string $dkimPublicKey = null;
+
+    #[ORM\Column(
+        name: 'dkim_provisioned_at',
+        type: Types::DATETIME_IMMUTABLE,
+        nullable: true,
+    )]
+    private ?DateTimeImmutable $dkimProvisionedAt = null;
+
     public function __construct(
         DomainName $domain,
         string $verificationToken,
@@ -141,6 +163,57 @@ final class SendingDomain
     public function getDisabledAt(): ?DateTimeImmutable
     {
         return $this->disabledAt;
+    }
+
+    public function getDkimSelector(): ?string
+    {
+        return $this->dkimSelector;
+    }
+
+    public function getDkimPublicKey(): ?string
+    {
+        return $this->dkimPublicKey;
+    }
+
+    public function getDkimProvisionedAt(): ?DateTimeImmutable
+    {
+        return $this->dkimProvisionedAt;
+    }
+
+    public function isDkimReady(): bool
+    {
+        return $this->dkimSelector !== null
+            && $this->dkimPublicKey !== null
+            && $this->dkimProvisionedAt !== null;
+    }
+
+    public function getDkimRecordName(): ?string
+    {
+        if (
+            !$this->isDkimReady()
+        ) {
+            return null;
+        }
+
+        return sprintf(
+            '%s._domainkey.%s',
+            $this->dkimSelector,
+            $this->domain,
+        );
+    }
+
+    public function getDkimRecordValue(): ?string
+    {
+        if (
+            !$this->isDkimReady()
+        ) {
+            return null;
+        }
+
+        return sprintf(
+            'v=DKIM1; k=rsa; p=%s',
+            $this->dkimPublicKey,
+        );
     }
 
     public function getVerificationRecordName(): string
@@ -214,6 +287,63 @@ final class SendingDomain
 
         $this->verifiedAt =
             $verifiedAt;
+    }
+
+    public function markDkimProvisioned(
+        string $selector,
+        string $publicKey,
+        ?DateTimeImmutable $at = null,
+    ): void {
+        if (
+            $this->status
+            !== SendingDomainStatus::VERIFIED
+        ) {
+            throw new LogicException(
+                'DKIM can only be provisioned for a verified sending domain.',
+            );
+        }
+
+        if (
+            preg_match(
+                '/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/D',
+                $selector,
+            ) !== 1
+            || $publicKey === ''
+            || base64_decode(
+                $publicKey,
+                true,
+            ) === false
+        ) {
+            throw new InvalidArgumentException(
+                'Invalid DKIM key material.',
+            );
+        }
+
+        if ($this->isDkimReady()) {
+            if (
+                $this->dkimSelector !== $selector
+                || !hash_equals(
+                    (string) $this->dkimPublicKey,
+                    $publicKey,
+                )
+            ) {
+                throw new LogicException(
+                    'Provisioned DKIM material cannot be replaced implicitly.',
+                );
+            }
+
+            return;
+        }
+
+        $this->dkimSelector =
+            $selector;
+
+        $this->dkimPublicKey =
+            $publicKey;
+
+        $this->dkimProvisionedAt =
+            $at
+            ?? self::now();
     }
 
     public function disable(

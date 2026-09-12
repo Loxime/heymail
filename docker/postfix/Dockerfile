@@ -39,7 +39,7 @@ RUN set -eux; \
     postconf -e 'milter_protocol = 6'; \
     postconf -e 'milter_connect_timeout = 5s'; \
     postconf -e 'milter_command_timeout = 5s'; \
-    postconf -e 'milter_content_timeout = 60s'; \
+    postconf -e 'milter_content_timeout = 10s'; \
     \
     postconf -e 'queue_run_delay = 5s'; \
     postconf -e 'minimal_backoff_time = 5s'; \

@@ -11,6 +11,7 @@ framework:
         routing:
             'App\Message\SendOutboundEmail': outbound
             'App\Message\VerifySendingDomain': domain_verification
+            'App\Message\ProvisionSendingDomainDkim': dkim_provisioning
 
         transports:
             outbound:
@@ -33,6 +34,21 @@ framework:
                 options:
                     table_name: messenger_messages
                     queue_name: domain_verification
+                    auto_setup: false
+
+                retry_strategy:
+                    max_retries: 3
+                    delay: 2000
+                    multiplier: 2
+                    max_delay: 10000
+
+
+            dkim_provisioning:
+                dsn: 'doctrine://default'
+                serializer: messenger.transport.symfony_serializer
+                options:
+                    table_name: messenger_messages
+                    queue_name: dkim_provisioning
                     auto_setup: false
 
                 retry_strategy:

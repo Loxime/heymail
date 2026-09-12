@@ -5,6 +5,10 @@ set -eu
 DOMAIN="heymail.test"
 SELECTOR="lab"
 
+PROVISIONER_UID="1000"
+RSPAMD_UID="100"
+RSPAMD_GID="101"
+
 PRIVATE_DIR="/private"
 PUBLIC_DIR="/public"
 
@@ -17,17 +21,40 @@ PUBLIC_TMP="/tmp/${DOMAIN}.${SELECTOR}.dns.txt"
 PRIVATE_STAGE="${PRIVATE_KEY}.tmp.$$"
 PUBLIC_STAGE="${PUBLIC_RECORD}.tmp.$$"
 
+PRIVATE_DIR_PREPARED="0"
+
 fail() {
     printf 'DKIM bootstrap failure: %s\n' "$1" >&2
     exit 1
 }
 
 cleanup() {
-    rm -f \
-        "$PRIVATE_TMP" \
-        "$PUBLIC_TMP" \
-        "$PRIVATE_STAGE" \
-        "$PUBLIC_STAGE"
+    set +e
+
+    # Ephemeral files are always accessible.
+    rm -f         "$PRIVATE_TMP"         "$PUBLIC_TMP"         "$PUBLIC_STAGE"
+
+    # PRIVATE_STAGE is accessible only while the bootstrap still owns
+    # PRIVATE_DIR. Once ownership has been restored to the provisioner,
+    # deliberately do not traverse /private again.
+    if [ "$PRIVATE_DIR_PREPARED" = "1" ]; then
+        rm -f "$PRIVATE_STAGE"
+
+        chmod 0770 "$PRIVATE_DIR"
+        chown "${PROVISIONER_UID}:${RSPAMD_GID}" "$PRIVATE_DIR"
+    fi
+
+}
+
+restore_private_root() {
+    # We still own PRIVATE_DIR here, so no CAP_FOWNER is needed.
+    chmod 0770 "$PRIVATE_DIR"
+    chown "${PROVISIONER_UID}:${RSPAMD_GID}" "$PRIVATE_DIR"
+
+    PRIVATE_DIR_PREPARED="0"
+
+    [ "$(stat -c '%u:%g:%a' "$PRIVATE_DIR")" = "1000:101:770" ] \
+        || fail "dynamic DKIM root permissions are invalid"
 }
 
 trap cleanup EXIT HUP INT TERM
@@ -35,7 +62,22 @@ trap cleanup EXIT HUP INT TERM
 umask 077
 
 # ---------------------------------------------------------------------------
-# Existing keypair: validate it and remain idempotent.
+# Bootstrap temporary ownership.
+#
+# The persistent private root normally belongs to the non-root DKIM
+# provisioner (1000:101). The bootstrap has CAP_CHOWN only.
+#
+# Take ownership before inspecting/staging the fixed laboratory fixture,
+# then restore ownership to the provisioner before exiting.
+# ---------------------------------------------------------------------------
+
+chown "0:${RSPAMD_GID}" "$PRIVATE_DIR"
+chmod 0770 "$PRIVATE_DIR"
+
+PRIVATE_DIR_PREPARED="1"
+
+# ---------------------------------------------------------------------------
+# Existing fixed laboratory keypair: validate it and remain idempotent.
 # ---------------------------------------------------------------------------
 
 if [ -e "$PRIVATE_KEY" ] || [ -e "$PUBLIC_RECORD" ]; then
@@ -49,7 +91,7 @@ if [ -e "$PRIVATE_KEY" ] || [ -e "$PUBLIC_RECORD" ]; then
         stat -c '%u:%g:%a' "$PRIVATE_KEY"
     )"
 
-    [ "$PRIVATE_METADATA" = "100:101:400" ] \
+    [ "$PRIVATE_METADATA" = "${RSPAMD_UID}:${RSPAMD_GID}:400" ] \
         || fail "private key permissions or ownership are invalid"
 
     PUBLIC_MODE="$(
@@ -70,12 +112,14 @@ if [ -e "$PRIVATE_KEY" ] || [ -e "$PUBLIC_RECORD" ]; then
         >/dev/null \
         || fail "public DKIM record is not RSA DKIM"
 
+    restore_private_root
+
     printf 'DKIM keypair already provisioned and valid\n'
     exit 0
 fi
 
 # ---------------------------------------------------------------------------
-# Generate the keypair only in ephemeral /tmp first.
+# Generate the fixed laboratory keypair in ephemeral /tmp first.
 # ---------------------------------------------------------------------------
 
 rspamadm dkim_keygen \
@@ -111,12 +155,12 @@ grep -F \
     || fail "generated public DKIM record is not RSA DKIM"
 
 # ---------------------------------------------------------------------------
-# Stage into persistent volumes, then atomically publish final names.
+# Stage atomically into persistent storage.
 # ---------------------------------------------------------------------------
 
 cp "$PRIVATE_TMP" "$PRIVATE_STAGE"
 chmod 0400 "$PRIVATE_STAGE"
-chown 100:101 "$PRIVATE_STAGE"
+chown "${RSPAMD_UID}:${RSPAMD_GID}" "$PRIVATE_STAGE"
 
 cp "$PUBLIC_TMP" "$PUBLIC_STAGE"
 chmod 0444 "$PUBLIC_STAGE"
@@ -128,10 +172,12 @@ PRIVATE_METADATA="$(
     stat -c '%u:%g:%a' "$PRIVATE_KEY"
 )"
 
-[ "$PRIVATE_METADATA" = "100:101:400" ] \
+[ "$PRIVATE_METADATA" = "${RSPAMD_UID}:${RSPAMD_GID}:400" ] \
     || fail "final private key permissions are invalid"
 
 [ "$(stat -c '%a' "$PUBLIC_RECORD")" = "444" ] \
     || fail "final public record permissions are invalid"
+
+restore_private_root
 
 printf 'DKIM keypair provisioned successfully\n'

@@ -60,9 +60,10 @@ final class SenderIdentity
         if (
             $sendingDomain->getStatus()
             !== SendingDomainStatus::VERIFIED
+            || !$sendingDomain->isDkimReady()
         ) {
             throw new LogicException(
-                'Sender identity requires a verified sending domain.',
+                'Sender identity requires a verified DKIM-ready sending domain.',
             );
         }
 
@@ -114,6 +115,9 @@ final class SenderIdentity
         return $this
             ->sendingDomain
             ->getStatus()
-            === SendingDomainStatus::VERIFIED;
+            === SendingDomainStatus::VERIFIED
+            && $this
+                ->sendingDomain
+                ->isDkimReady();
     }
 }

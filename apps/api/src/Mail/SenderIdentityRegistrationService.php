@@ -96,6 +96,12 @@ SQL,
                 );
             }
 
+            if (!$domain->isDkimReady()) {
+                throw new SenderDomainNotReadyException(
+                    'Sender domain DKIM is not ready.',
+                );
+            }
+
             $sender =
                 new SenderIdentity(
                     $domain,

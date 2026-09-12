@@ -79,6 +79,30 @@ final class SenderIdentityTest extends TestCase
         );
     }
 
+    public function testVerifiedDomainWithoutDkimCannotCreateSender(): void
+    {
+        $domain =
+            new SendingDomain(
+                new DomainName(
+                    'example.com',
+                ),
+                self::TOKEN,
+            );
+
+        $domain->markVerified();
+
+        $this->expectException(
+            LogicException::class,
+        );
+
+        new SenderIdentity(
+            $domain,
+            new SenderEmailAddress(
+                'sender@example.com',
+            ),
+        );
+    }
+
     public function testSenderMustBelongToItsDomain(): void
     {
         $domain =
@@ -109,6 +133,16 @@ final class SenderIdentityTest extends TestCase
         $domain->markVerified(
             new DateTimeImmutable(
                 '2026-09-11T17:00:00+00:00',
+            ),
+        );
+
+        $domain->markDkimProvisioned(
+            'hm1',
+            base64_encode(
+                'unit-test-public-key',
+            ),
+            new DateTimeImmutable(
+                '2026-09-11T17:01:00+00:00',
             ),
         );
 
