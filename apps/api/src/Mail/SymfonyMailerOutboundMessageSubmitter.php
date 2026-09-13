@@ -13,29 +13,10 @@ use Symfony\Component\Mime\Email;
 final class SymfonyMailerOutboundMessageSubmitter implements
     OutboundMessageSubmitter
 {
-    private string $bounceDomain;
-
     public function __construct(
         private readonly MailerInterface $mailer,
-        string $bounceDomain,
+        private readonly BounceAddressCodec $bounceAddressCodec,
     ) {
-        if (
-            $bounceDomain === ''
-            || str_contains(
-                $bounceDomain,
-                '@',
-            )
-            || filter_var(
-                'probe@' . $bounceDomain,
-                FILTER_VALIDATE_EMAIL,
-            ) === false
-        ) {
-            throw new InvalidArgumentException(
-                'Invalid HeyMail bounce domain.',
-            );
-        }
-
-        $this->bounceDomain = $bounceDomain;
     }
 
     public function submit(
@@ -95,17 +76,19 @@ final class SymfonyMailerOutboundMessageSubmitter implements
                 sprintf(
                     'heymail-%d@%s',
                     $outboundMessageId,
-                    $this->bounceDomain,
+                    $this
+                        ->bounceAddressCodec
+                        ->domain(),
                 ),
             );
 
         $envelope = new Envelope(
             new Address(
-                sprintf(
-                    'bounce+%d@%s',
-                    $outboundMessageId,
-                    $this->bounceDomain,
-                ),
+                $this
+                    ->bounceAddressCodec
+                    ->senderFor(
+                        $outboundMessageId,
+                    ),
             ),
             $recipients,
         );

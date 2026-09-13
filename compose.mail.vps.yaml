@@ -150,6 +150,7 @@ services:
       MAILER_DSN: "smtp://postfix-mail:10025"
 
       HEYMAIL_BOUNCE_DOMAIN: ${HEYMAIL_BOUNCE_DOMAIN}
+      HEYMAIL_BOUNCE_HMAC_KEY_FILE: /run/secrets/bounce_hmac_key
 
       PAYLOAD_KEK_FILE: /run/secrets/payload_kek_v1
 
@@ -163,6 +164,7 @@ services:
       - app_secret
       - postgres_app_password
       - payload_kek_v1
+      - bounce_hmac_key
 
     networks:
       - data_net
@@ -474,6 +476,10 @@ volumes:
 
 
 secrets:
+
+  bounce_hmac_key:
+    file: ./secrets/prod/bounce_hmac_key
+
 
   ovh_application_key:
     file: ./secrets/prod/ovh_application_key

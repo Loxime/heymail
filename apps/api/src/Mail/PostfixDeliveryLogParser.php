@@ -52,7 +52,8 @@ final class PostfixDeliveryLogParser
         if (
             preg_match(
                 '/\b([A-Za-z0-9]+): '
-                . 'from=<bounce\+([1-9][0-9]*)@'
+                . 'from=<bounce\+([1-9][0-9]*)'
+                . '(?:\+[a-f0-9]{32})?@'
                 . $domain
                 . '>/i',
                 $line,

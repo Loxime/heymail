@@ -19,7 +19,7 @@ final class PostfixDeliveryLogParserTest extends TestCase
         self::assertNull(
             $parser->consume(
                 'postfix/qmgr[1]: ABC123: '
-                . 'from=<bounce+42@heymail.test>, '
+                . 'from=<bounce+42+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa@heymail.test>, '
                 . 'size=100, nrcpt=1',
             ),
         );
@@ -106,7 +106,7 @@ final class PostfixDeliveryLogParserTest extends TestCase
 
         $parser->consume(
             'postfix/qmgr[1]: REDACT1: '
-            . 'from=<bounce+77@heymail.test>, '
+            . 'from=<bounce+77+bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb@heymail.test>, '
             . 'size=100, nrcpt=1',
         );
 
