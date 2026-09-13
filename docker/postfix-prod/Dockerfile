@@ -47,6 +47,8 @@ RUN set -eux; \
     postconf -P \
         'postfix-mail:10025/inet/syslog_name=postfix/heymail-submission'; \
     postconf -P \
+        'postfix-mail:10025/inet/mynetworks=0.0.0.0/0'; \
+    postconf -P \
         'postfix-mail:10025/inet/smtpd_milters=inet:rspamd:11332'; \
     postconf -P \
         'postfix-mail:10025/inet/milter_macro_daemon_name=ORIGINATING'; \
