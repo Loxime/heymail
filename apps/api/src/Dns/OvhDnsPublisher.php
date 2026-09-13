@@ -11,11 +11,15 @@ use RuntimeException;
 final class OvhDnsPublisher
 {
     private string $zone;
+    private string $bounceDomain;
+    private string $publicIpv4;
 
     public function __construct(
         private readonly Connection $connection,
         private readonly OvhApiClient $client,
         string $zone,
+        string $bounceDomain,
+        string $publicIpv4,
     ) {
         $this->zone =
             (
@@ -23,6 +27,37 @@ final class OvhDnsPublisher
                     $zone,
                 )
             )->value;
+
+        $this->bounceDomain =
+            (
+                new DomainName(
+                    $bounceDomain,
+                )
+            )->value;
+
+        if (
+            !$this->isManagedDomain(
+                $this->bounceDomain,
+            )
+        ) {
+            throw new RuntimeException(
+                'Bounce domain is outside managed zone.',
+            );
+        }
+
+        if (
+            filter_var(
+                $publicIpv4,
+                FILTER_VALIDATE_IP,
+                FILTER_FLAG_IPV4,
+            ) === false
+        ) {
+            throw new RuntimeException(
+                'Invalid public IPv4 address.',
+            );
+        }
+
+        $this->publicIpv4 = $publicIpv4;
     }
 
     /**
@@ -51,6 +86,50 @@ SQL
 
         $results = [];
         $changed = false;
+
+        $action =
+            $this->client
+                ->syncARecord(
+                    $this->zone,
+                    $this->relativeName(
+                        $this->bounceDomain,
+                    ),
+                    $this->publicIpv4,
+                );
+
+        $results[] = [
+            'record'
+                => 'A '
+                . $this->bounceDomain,
+            'action' => $action,
+        ];
+
+        if ($action !== 'unchanged') {
+            $changed = true;
+        }
+
+        $action =
+            $this->client
+                ->syncMxRecord(
+                    $this->zone,
+                    $this->relativeName(
+                        $this->bounceDomain,
+                    ),
+                    '10 '
+                    . $this->bounceDomain
+                    . '.',
+                );
+
+        $results[] = [
+            'record'
+                => 'MX '
+                . $this->bounceDomain,
+            'action' => $action,
+        ];
+
+        if ($action !== 'unchanged') {
+            $changed = true;
+        }
 
         foreach ($rows as $row) {
             $domainRaw =

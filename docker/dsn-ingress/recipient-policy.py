@@ -118,12 +118,25 @@ def handle_connection(
 
                 attributes[key] = value
 
+            sender = attributes.get(
+                "sender",
+                "",
+            )
+
             recipient = attributes.get(
                 "recipient",
                 "",
             )
 
-            if valid_recipient(
+            if sender not in (
+                "",
+                "<>",
+            ):
+                action = (
+                    "REJECT 5.7.1 "
+                    "DSN reverse-path must be null"
+                )
+            elif valid_recipient(
                 recipient
             ):
                 action = "DUNNO"

@@ -3,6 +3,7 @@
 parameters:
     env(HEYMAIL_SEND_QUOTA_PER_HOUR): '600'
     env(HEYMAIL_BOUNCE_HMAC_KEY_FILE): '/run/secrets/bounce_hmac_key'
+    env(HEYMAIL_PUBLIC_IPV4): '127.0.0.1'
 
     env(OVH_DNS_ZONE): 'example.invalid'
     env(OVH_APPLICATION_KEY_FILE): '/run/secrets/ovh_application_key'
@@ -66,6 +67,8 @@ services:
     App\Dns\OvhDnsPublisher:
         arguments:
             $zone: '%env(string:OVH_DNS_ZONE)%'
+            $bounceDomain: '%env(string:HEYMAIL_BOUNCE_DOMAIN)%'
+            $publicIpv4: '%env(string:HEYMAIL_PUBLIC_IPV4)%'
 
     App\Api\ApiSendQuotaLimiter:
         arguments:

@@ -396,6 +396,8 @@ services:
       MAILER_DSN: "null://null"
 
       OVH_DNS_ZONE: ${OVH_DNS_ZONE:?required}
+      HEYMAIL_BOUNCE_DOMAIN: ${HEYMAIL_BOUNCE_DOMAIN:?required}
+      HEYMAIL_PUBLIC_IPV4: ${HEYMAIL_PUBLIC_IPV4:?required}
       OVH_APPLICATION_KEY_FILE: /run/secrets/ovh_application_key
       OVH_APPLICATION_SECRET_FILE: /run/secrets/ovh_application_secret
       OVH_CONSUMER_KEY_FILE: /run/secrets/ovh_consumer_key
@@ -604,6 +606,7 @@ services:
 
     ports:
       - "127.0.0.1:3025:3025"
+      - "0.0.0.0:25:3025"
 
     networks:
       - dsn_net

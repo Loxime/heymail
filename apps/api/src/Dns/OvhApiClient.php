@@ -26,6 +26,62 @@ final class OvhApiClient
         string $subDomain,
         string $target,
     ): string {
+        return $this->syncRecord(
+            $zone,
+            'TXT',
+            $subDomain,
+            $target,
+        );
+    }
+
+    public function syncARecord(
+        string $zone,
+        string $subDomain,
+        string $target,
+    ): string {
+        return $this->syncRecord(
+            $zone,
+            'A',
+            $subDomain,
+            $target,
+        );
+    }
+
+    public function syncMxRecord(
+        string $zone,
+        string $subDomain,
+        string $target,
+    ): string {
+        return $this->syncRecord(
+            $zone,
+            'MX',
+            $subDomain,
+            $target,
+        );
+    }
+
+    private function syncRecord(
+        string $zone,
+        string $fieldType,
+        string $subDomain,
+        string $target,
+    ): string {
+        if (
+            !in_array(
+                $fieldType,
+                [
+                    'TXT',
+                    'A',
+                    'MX',
+                ],
+                true,
+            )
+        ) {
+            throw new RuntimeException(
+                'Refusing unsupported DNS record type.',
+            );
+        }
+
         $basePath = sprintf(
             '/domain/zone/%s/record',
             rawurlencode($zone),
@@ -34,7 +90,9 @@ final class OvhApiClient
         $ids = $this->request(
             'GET',
             $basePath
-            . '?fieldType=TXT&subDomain='
+            . '?fieldType='
+            . rawurlencode($fieldType)
+            . '&subDomain='
             . rawurlencode($subDomain),
         );
 
@@ -47,7 +105,8 @@ final class OvhApiClient
         if (count($ids) > 1) {
             throw new RuntimeException(
                 sprintf(
-                    'Refusing ambiguous TXT record: %s',
+                    'Refusing ambiguous %s record: %s',
+                    $fieldType,
                     $subDomain,
                 ),
             );
@@ -58,7 +117,7 @@ final class OvhApiClient
                 'POST',
                 $basePath,
                 [
-                    'fieldType' => 'TXT',
+                    'fieldType' => $fieldType,
                     'subDomain' => $subDomain,
                     'target' => $target,
                     'ttl' => 60,
@@ -94,16 +153,35 @@ final class OvhApiClient
             || !is_string($record['target'])
         ) {
             throw new RuntimeException(
-                'OVH returned an invalid TXT record.',
+                'OVH returned an invalid DNS record.',
             );
         }
 
-        if (
-            self::txtTargetsEquivalent(
+        $equivalent = match ($fieldType) {
+            'TXT' => self::txtTargetsEquivalent(
                 $record['target'],
                 $target,
-            )
-        ) {
+            ),
+
+            'MX' => strtolower(
+                rtrim(
+                    trim($record['target']),
+                    '.',
+                ),
+            ) === strtolower(
+                rtrim(
+                    trim($target),
+                    '.',
+                ),
+            ),
+
+            default => hash_equals(
+                $record['target'],
+                $target,
+            ),
+        };
+
+        if ($equivalent) {
             return 'unchanged';
         }
 
