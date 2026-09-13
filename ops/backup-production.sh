@@ -24,34 +24,17 @@ chmod 0700 "$BACKUP_ROOT" "$DESTINATION"
 
 DB_DUMP="${DESTINATION}/postgres.dump"
 SECRETS_ARCHIVE="${DESTINATION}/secrets.tar.age"
-RECIPIENTS="${DESTINATION}/age-recipients.txt"
+RECIPIENT_FILE="${HEYMAIL_BACKUP_RECIPIENT_FILE:-$HOME/.config/heymail/backup-age.recipient}"
 METADATA="${DESTINATION}/metadata.txt"
 CHECKSUMS="${DESTINATION}/SHA256SUMS"
-
-cleanup() {
-    rm -f "$RECIPIENTS"
-}
-
-trap cleanup EXIT
 
 if ! command -v age >/dev/null 2>&1; then
     echo "ERROR: age is not installed" >&2
     exit 1
 fi
 
-if [ ! -r "$HOME/.ssh/authorized_keys" ]; then
-    echo "ERROR: ~/.ssh/authorized_keys is unavailable" >&2
-    exit 1
-fi
-
-awk '
-    $1 == "ssh-ed25519" || $1 == "ssh-rsa" {
-        print $1 " " $2
-    }
-' "$HOME/.ssh/authorized_keys" > "$RECIPIENTS"
-
-if [ ! -s "$RECIPIENTS" ]; then
-    echo "ERROR: no age-compatible SSH public key found" >&2
+if [ ! -r "$RECIPIENT_FILE" ]; then
+    echo "ERROR: backup age recipient is unavailable" >&2
     exit 1
 fi
 
@@ -89,7 +72,7 @@ tar \
     --directory="$ROOT_DIR" \
     secrets/prod \
     | age \
-        --recipients-file "$RECIPIENTS" \
+        --recipients-file "$RECIPIENT_FILE" \
         --output "$SECRETS_ARCHIVE"
 
 test -s "$SECRETS_ARCHIVE"
