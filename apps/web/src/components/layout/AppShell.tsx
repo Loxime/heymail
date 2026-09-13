@@ -158,8 +158,12 @@ export function AppShell() {
         }
       >
         <div className="sidebar__brand">
-          <div className="brand-mark">
-            H
+          <div className="brand-mark brand-mark--logo">
+            <img
+              alt=""
+              aria-hidden="true"
+              src="/heymail-logo.svg"
+            />
           </div>
 
           <div>
@@ -271,8 +275,12 @@ export function AppShell() {
           </div>
 
           <div className="topbar__account">
-            <div className="account-avatar">
-              HM
+            <div className="account-avatar account-avatar--logo">
+              <img
+                alt=""
+                aria-hidden="true"
+                src="/heymail-logo.svg"
+              />
             </div>
 
             <div className="account-copy">

@@ -3236,3 +3236,38 @@ textarea:focus-visible {
   }
 }
 
+/* heymail-brand-logo */
+
+.brand-mark--logo {
+  width: 39px;
+  height: 39px;
+
+  padding: 2px;
+
+  background: transparent;
+}
+
+.brand-mark--logo img {
+  display: block;
+  width: 100%;
+  height: 100%;
+
+  object-fit: contain;
+}
+
+.account-avatar--logo {
+  overflow: hidden;
+
+  padding: 5px;
+
+  background: #f8fafc;
+}
+
+.account-avatar--logo img {
+  display: block;
+  width: 100%;
+  height: 100%;
+
+  object-fit: contain;
+}
+

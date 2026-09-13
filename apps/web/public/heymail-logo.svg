@@ -1,0 +1,77 @@
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  viewBox="0 0 512 320"
+  role="img"
+  aria-labelledby="title"
+>
+  <title id="title">HeyMail</title>
+
+  <defs>
+    <linearGradient
+      id="heymail-gradient"
+      x1="40"
+      y1="60"
+      x2="450"
+      y2="270"
+      gradientUnits="userSpaceOnUse"
+    >
+      <stop
+        offset="0"
+        stop-color="#5141B8"
+      />
+      <stop
+        offset="1"
+        stop-color="#7055D5"
+      />
+    </linearGradient>
+  </defs>
+
+  <!-- Envelope -->
+  <path
+    d="
+      M 337 177
+      L 431 271
+      M 431 128
+      L 431 271
+      L 142 271
+    "
+    fill="none"
+    stroke="url(#heymail-gradient)"
+    stroke-width="18"
+    stroke-linecap="square"
+    stroke-linejoin="round"
+  />
+
+  <!-- Upper wing -->
+  <path
+    d="
+      M 40 111
+      L 473 36
+      L 134 156
+      Z
+    "
+    fill="url(#heymail-gradient)"
+  />
+
+  <!-- Main paper-plane body -->
+  <path
+    d="
+      M 155 168
+      L 473 36
+      L 276 210
+      Z
+    "
+    fill="url(#heymail-gradient)"
+  />
+
+  <!-- Lower fin -->
+  <path
+    d="
+      M 155 168
+      L 214 191
+      L 128 271
+      Z
+    "
+    fill="url(#heymail-gradient)"
+  />
+</svg>
