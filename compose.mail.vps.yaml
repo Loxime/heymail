@@ -440,6 +440,66 @@ services:
       - --sleep-seconds=60
 
 
+  dsn-worker:
+    image: heymail-api:prod
+    restart: unless-stopped
+
+    user: "${HEYMAIL_UID}:${HEYMAIL_GID}"
+
+    environment:
+      APP_ENV: prod
+      APP_DEBUG: "0"
+      APP_RUNTIME_OPTIONS: '{"disable_dotenv":true}'
+      APP_SECRET_FILE: /run/secrets/app_secret
+
+      MAILER_DSN: "null://null"
+      PAYLOAD_KEK_FILE: /run/secrets/payload_kek_v1
+
+      DB_HOST: database
+      DB_PORT: "5432"
+      DB_NAME: ${POSTGRES_DB}
+      DB_USER: heymail_app
+      DB_PASSWORD_FILE: /run/secrets/postgres_app_password
+
+    secrets:
+      - app_secret
+      - postgres_app_password
+      - payload_kek_v1
+
+    volumes:
+      - dsn_events:/events
+
+    networks:
+      - data_net
+
+    depends_on:
+      database-migrate:
+        condition: service_completed_successfully
+
+      dsn-volume-bootstrap:
+        condition: service_completed_successfully
+
+    read_only: true
+
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+      - /app/var:size=32m,mode=0770,uid=${HEYMAIL_UID},gid=${HEYMAIL_GID}
+
+    security_opt:
+      - no-new-privileges:true
+
+    cap_drop:
+      - ALL
+
+    command:
+      - php
+      - bin/console
+      - app:consume-dsn-spool
+      - --directory=/events
+      - --sleep-ms=500
+      - --no-interaction
+
+
   dsn-volume-bootstrap:
     image: alpine:3.23.5
     restart: "no"
