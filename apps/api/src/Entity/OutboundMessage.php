@@ -21,6 +21,20 @@ use LogicException;
     name: 'uniq_outbound_message_idempotency_hash',
     columns: ['idempotency_key_hash'],
 )]
+#[ORM\Index(
+    name: 'idx_outbound_message_status_list',
+    columns: [
+        'status',
+        'id',
+    ],
+)]
+#[ORM\Index(
+    name: 'idx_outbound_message_created_list',
+    columns: [
+        'created_at',
+        'id',
+    ],
+)]
 final class OutboundMessage
 {
     #[ORM\Id]

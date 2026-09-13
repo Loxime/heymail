@@ -6,10 +6,15 @@ namespace App\Controller;
 
 use App\Api\ApiCredentials;
 use App\Entity\OutboundMessage;
+use App\Enum\OutboundMessageEventType;
+use App\Enum\OutboundMessageStatus;
 use App\Mail\IdempotencyConflictException;
 use App\Mail\OutboundEmailPayload;
 use App\Mail\OutboundMessageSubmissionService;
 use App\Mail\SenderAuthorizationService;
+use App\Query\OutboundMessageQueryService;
+use DateTimeImmutable;
+use DateTimeZone;
 use Doctrine\ORM\EntityManagerInterface;
 use InvalidArgumentException;
 use JsonException;
@@ -28,6 +33,7 @@ final readonly class TransactionalMailController
         private OutboundMessageSubmissionService $submissionService,
         private SenderAuthorizationService $senderAuthorization,
         private EntityManagerInterface $entityManager,
+        private OutboundMessageQueryService $messageQuery,
     ) {
     }
 
@@ -184,6 +190,201 @@ final readonly class TransactionalMailController
     }
 
     #[Route(
+        '/messages',
+        name: 'api_v1_messages',
+        methods: ['GET'],
+    )]
+    public function messages(
+        Request $request,
+    ): JsonResponse {
+        if (
+            !$this->credentials->authorizes(
+                $request,
+            )
+        ) {
+            return self::unauthorized();
+        }
+
+        $query =
+            $request
+                ->query
+                ->all();
+
+        $allowed = [
+            'limit',
+            'cursor',
+            'status',
+            'event',
+            'createdAfter',
+            'createdBefore',
+        ];
+
+        foreach (array_keys($query) as $key) {
+            if (
+                !is_string($key)
+                || !in_array(
+                    $key,
+                    $allowed,
+                    true,
+                )
+            ) {
+                return self::error(
+                    'invalid_query',
+                    'Unexpected query parameter.',
+                    Response::HTTP_BAD_REQUEST,
+                );
+            }
+        }
+
+        foreach ($query as $value) {
+            if (!is_string($value)) {
+                return self::error(
+                    'invalid_query',
+                    'Query parameters must be scalar strings.',
+                    Response::HTTP_BAD_REQUEST,
+                );
+            }
+        }
+
+        $limitRaw =
+            $query['limit']
+            ?? '50';
+
+        if (
+            preg_match(
+                '/^[1-9][0-9]{0,2}$/D',
+                $limitRaw,
+            ) !== 1
+        ) {
+            return self::error(
+                'invalid_query',
+                'limit must be between 1 and 100.',
+                Response::HTTP_BAD_REQUEST,
+            );
+        }
+
+        $limit = (int) $limitRaw;
+
+        if ($limit > 100) {
+            return self::error(
+                'invalid_query',
+                'limit must be between 1 and 100.',
+                Response::HTTP_BAD_REQUEST,
+            );
+        }
+
+        $cursor =
+            $query['cursor']
+            ?? null;
+
+        if (
+            $cursor !== null
+            && (
+                $cursor === ''
+                || strlen($cursor) > 512
+            )
+        ) {
+            return self::error(
+                'invalid_query',
+                'Invalid cursor.',
+                Response::HTTP_BAD_REQUEST,
+            );
+        }
+
+        $status = null;
+
+        if (isset($query['status'])) {
+            $status =
+                OutboundMessageStatus::tryFrom(
+                    $query['status'],
+                );
+
+            if ($status === null) {
+                return self::error(
+                    'invalid_query',
+                    'Invalid message status.',
+                    Response::HTTP_BAD_REQUEST,
+                );
+            }
+        }
+
+        $event = null;
+
+        if (isset($query['event'])) {
+            $event =
+                OutboundMessageEventType::tryFrom(
+                    $query['event'],
+                );
+
+            if ($event === null) {
+                return self::error(
+                    'invalid_query',
+                    'Invalid message event.',
+                    Response::HTTP_BAD_REQUEST,
+                );
+            }
+        }
+
+        try {
+            $createdAfter =
+                isset($query['createdAfter'])
+                    ? self::parseDateQuery(
+                        $query['createdAfter'],
+                    )
+                    : null;
+
+            $createdBefore =
+                isset($query['createdBefore'])
+                    ? self::parseDateQuery(
+                        $query['createdBefore'],
+                    )
+                    : null;
+        } catch (InvalidArgumentException) {
+            return self::error(
+                'invalid_query',
+                'Dates must be RFC 3339 timestamps.',
+                Response::HTTP_BAD_REQUEST,
+            );
+        }
+
+        if (
+            $createdAfter !== null
+            && $createdBefore !== null
+            && $createdAfter >= $createdBefore
+        ) {
+            return self::error(
+                'invalid_query',
+                'createdAfter must be before createdBefore.',
+                Response::HTTP_BAD_REQUEST,
+            );
+        }
+
+        try {
+            $result =
+                $this
+                    ->messageQuery
+                    ->list(
+                        limit: $limit,
+                        cursor: $cursor,
+                        status: $status,
+                        event: $event,
+                        createdAfter: $createdAfter,
+                        createdBefore: $createdBefore,
+                    );
+        } catch (InvalidArgumentException) {
+            return self::error(
+                'invalid_query',
+                'Invalid cursor.',
+                Response::HTTP_BAD_REQUEST,
+            );
+        }
+
+        return new JsonResponse(
+            $result,
+        );
+    }
+
+    #[Route(
         '/messages/{id}',
         name: 'api_v1_message_status',
         requirements: [
@@ -239,6 +440,49 @@ final readonly class TransactionalMailController
             );
         }
 
+        $events = [];
+        $deliverySummary = [
+            'delivered' => 0,
+            'tempfail' => 0,
+            'bounced' => 0,
+        ];
+
+        foreach (
+            $message->getEvents()
+            as $event
+        ) {
+            $type =
+                $event
+                    ->getType()
+                    ->value;
+
+            if (
+                array_key_exists(
+                    $type,
+                    $deliverySummary,
+                )
+            ) {
+                ++$deliverySummary[$type];
+            }
+
+            $events[] = [
+                'type' => $type,
+                'occurredAt'
+                    => $event
+                        ->getOccurredAt()
+                        ->format(DATE_ATOM),
+                'recipientHash'
+                    => $event
+                        ->getRecipientHash(),
+                'smtpStatus'
+                    => $event
+                        ->getSmtpStatus(),
+                'detail'
+                    => $event
+                        ->getDetail(),
+            ];
+        }
+
         return new JsonResponse([
             'messageId' => $messageId,
             'status'
@@ -265,7 +509,49 @@ final readonly class TransactionalMailController
                 => $message
                     ->getSubmittedAt()
                     ?->format(DATE_ATOM),
+            'deliverySummary'
+                => $deliverySummary,
+            'events'
+                => $events,
         ]);
+    }
+
+    private static function parseDateQuery(
+        string $value,
+    ): DateTimeImmutable {
+        if (
+            strlen($value) > 64
+            || preg_match(
+                '/^\d{4}-\d{2}-\d{2}T'
+                . '\d{2}:\d{2}:\d{2}'
+                . '(?:\.\d{1,6})?'
+                . '(?:Z|[+-]\d{2}:\d{2})$/D',
+                $value,
+            ) !== 1
+        ) {
+            throw new InvalidArgumentException(
+                'Invalid date.',
+            );
+        }
+
+        try {
+            return (
+                new DateTimeImmutable(
+                    $value,
+                )
+            )
+                ->setTimezone(
+                    new DateTimeZone(
+                        'UTC',
+                    ),
+                );
+        } catch (\Exception $exception) {
+            throw new InvalidArgumentException(
+                'Invalid date.',
+                0,
+                $exception,
+            );
+        }
     }
 
     private static function unauthorized(): JsonResponse

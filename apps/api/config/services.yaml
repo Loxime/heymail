@@ -16,6 +16,10 @@ services:
     App\:
         resource: '../src/'
 
+    App\Query\MessageCursorCodec:
+        arguments:
+            $secret: '%kernel.secret%'
+
     App\Mail\OutboundEmailPayloadCipher:
         arguments:
             $payloadKekFile: '%env(string:PAYLOAD_KEK_FILE)%'

@@ -33,6 +33,13 @@ use InvalidArgumentException;
         'id',
     ],
 )]
+#[ORM\Index(
+    name: 'idx_outbound_message_event_type_message',
+    columns: [
+        'event_type',
+        'outbound_message_id',
+    ],
+)]
 final class OutboundMessageEvent
 {
     #[ORM\Id]
