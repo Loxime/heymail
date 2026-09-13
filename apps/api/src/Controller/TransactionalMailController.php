@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Controller;
 
 use App\Api\ApiCredentials;
+use App\Api\ApiSendQuotaLimiter;
 use App\Entity\OutboundMessage;
 use App\Enum\OutboundMessageEventType;
 use App\Enum\OutboundMessageStatus;
@@ -30,6 +31,7 @@ final readonly class TransactionalMailController
 
     public function __construct(
         private ApiCredentials $credentials,
+        private ApiSendQuotaLimiter $sendQuotaLimiter,
         private OutboundMessageSubmissionService $submissionService,
         private SenderAuthorizationService $senderAuthorization,
         private EntityManagerInterface $entityManager,
@@ -45,12 +47,37 @@ final readonly class TransactionalMailController
     public function send(
         Request $request,
     ): JsonResponse {
-        if (
-            !$this->credentials->authorizes(
-                $request,
-            )
-        ) {
+        $apiKeyFingerprint =
+            $this
+                ->credentials
+                ->authorizedKeyFingerprint(
+                    $request,
+                );
+
+        if ($apiKeyFingerprint === null) {
             return self::unauthorized();
+        }
+
+        $retryAfter =
+            $this
+                ->sendQuotaLimiter
+                ->consume(
+                    $apiKeyFingerprint,
+                );
+
+        if ($retryAfter !== null) {
+            $response = self::error(
+                'rate_limited',
+                'Hourly send request quota exceeded.',
+                Response::HTTP_TOO_MANY_REQUESTS,
+            );
+
+            $response->headers->set(
+                'Retry-After',
+                (string) $retryAfter,
+            );
+
+            return $response;
         }
 
         if (

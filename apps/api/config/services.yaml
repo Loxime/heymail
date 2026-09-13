@@ -1,6 +1,8 @@
 # yaml-language-server: $schema=../vendor/symfony/dependency-injection/Loader/schema/services.schema.json
 
 parameters:
+    env(HEYMAIL_SEND_QUOTA_PER_HOUR): '600'
+
     env(DNS_VERIFY_HOST): 'fake-dns'
     env(DNS_VERIFY_PORT): '8053'
     env(DNS_VERIFY_TIMEOUT_MS): '2000'
@@ -47,6 +49,10 @@ services:
     App\Mail\PostfixDeliveryLogParser:
         arguments:
             $bounceDomain: '%env(string:HEYMAIL_BOUNCE_DOMAIN)%'
+
+    App\Api\ApiSendQuotaLimiter:
+        arguments:
+            $limitPerHour: '%env(int:HEYMAIL_SEND_QUOTA_PER_HOUR)%'
 
     App\Api\ApiCredentials:
         arguments:

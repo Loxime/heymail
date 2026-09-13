@@ -52,6 +52,15 @@ final class ApiCredentials
     public function authorizes(
         Request $request,
     ): bool {
+        return $this
+            ->authorizedKeyFingerprint(
+                $request,
+            ) !== null;
+    }
+
+    public function authorizedKeyFingerprint(
+        Request $request,
+    ): ?string {
         $authorization = $request
             ->headers
             ->get('Authorization');
@@ -65,7 +74,7 @@ final class ApiCredentials
                 6,
             ) !== 0
         ) {
-            return false;
+            return null;
         }
 
         $decoded = base64_decode(
@@ -77,7 +86,7 @@ final class ApiCredentials
         );
 
         if (!is_string($decoded)) {
-            return false;
+            return null;
         }
 
         $separator = strpos(
@@ -86,7 +95,7 @@ final class ApiCredentials
         );
 
         if ($separator === false) {
-            return false;
+            return null;
         }
 
         $providedKey = substr(
@@ -100,12 +109,22 @@ final class ApiCredentials
             $separator + 1,
         );
 
-        return hash_equals(
-            $this->apiKey,
+        if (
+            !hash_equals(
+                $this->apiKey,
+                $providedKey,
+            )
+            || !hash_equals(
+                $this->apiSecret,
+                $providedSecret,
+            )
+        ) {
+            return null;
+        }
+
+        return hash(
+            'sha256',
             $providedKey,
-        ) && hash_equals(
-            $this->apiSecret,
-            $providedSecret,
         );
     }
 
