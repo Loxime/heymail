@@ -440,11 +440,143 @@ services:
       - --sleep-seconds=60
 
 
+  dsn-volume-bootstrap:
+    image: alpine:3.23.5
+    restart: "no"
+
+    user: "0:0"
+    network_mode: none
+
+    volumes:
+      - dsn_events:/events
+
+    entrypoint:
+      - /bin/sh
+      - -ec
+
+    command:
+      - >-
+        chown ${HEYMAIL_UID}:${HEYMAIL_GID} /events
+        && chmod 0770 /events
+
+    security_opt:
+      - no-new-privileges:true
+
+    cap_drop:
+      - ALL
+
+    cap_add:
+      - CHOWN
+      - FOWNER
+
+
+  dsn-ingress:
+    build:
+      context: .
+      dockerfile: docker/dsn-ingress/Dockerfile
+      args:
+        HEYMAIL_UID: ${HEYMAIL_UID}
+        HEYMAIL_GID: ${HEYMAIL_GID}
+        HEYMAIL_SMTP_HOSTNAME: ${HEYMAIL_SMTP_HOSTNAME}
+        HEYMAIL_BOUNCE_DOMAIN: ${HEYMAIL_BOUNCE_DOMAIN}
+
+    image: heymail-dsn-ingress:prod
+    restart: unless-stopped
+
+    environment:
+      HEYMAIL_BOUNCE_DOMAIN: ${HEYMAIL_BOUNCE_DOMAIN}
+      HEYMAIL_BOUNCE_HMAC_KEY_FILE: /run/secrets/bounce_hmac_key
+
+    secrets:
+      - bounce_hmac_key
+
+    volumes:
+      - dsn_postfix_queue:/var/spool/postfix
+      - dsn_postfix_data:/var/lib/postfix
+      - dsn_postfix_logs:/var/log/postfix
+      - dsn_events:/events
+
+    networks:
+      - dsn_net
+
+    depends_on:
+      dsn-volume-bootstrap:
+        condition: service_completed_successfully
+
+    read_only: true
+
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+      - /run:size=16m,mode=0755
+
+    security_opt:
+      - no-new-privileges:true
+
+    cap_drop:
+      - ALL
+
+    cap_add:
+      - SETUID
+      - SETGID
+      - DAC_OVERRIDE
+
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "/usr/local/bin/heymail-dsn-healthcheck"
+        ]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+      start_period: 10s
+
+
+  dsn-loopback-proxy:
+    build:
+      context: .
+      dockerfile: docker/dsn-proxy/Dockerfile
+
+    image: heymail-dsn-proxy:prod
+    restart: unless-stopped
+
+    user: "65534:65534"
+
+    ports:
+      - "127.0.0.1:3025:3025"
+
+    networks:
+      - dsn_net
+      - dsn_publish
+
+    depends_on:
+      dsn-ingress:
+        condition: service_healthy
+
+    read_only: true
+
+    tmpfs:
+      - /tmp:size=4m,mode=1777
+
+    security_opt:
+      - no-new-privileges:true
+
+    cap_drop:
+      - ALL
+
+
 networks:
 
   mail_net:
     name: heymail_prod_mail
     internal: true
+
+  dsn_net:
+    name: heymail_prod_dsn
+    internal: true
+
+  dsn_publish:
+    name: heymail_prod_dsn_publish
 
   filter_net:
     name: heymail_prod_filter
@@ -461,6 +593,18 @@ networks:
 
 
 volumes:
+
+  dsn_postfix_queue:
+    name: heymail_prod_dsn_postfix_queue
+
+  dsn_postfix_data:
+    name: heymail_prod_dsn_postfix_data
+
+  dsn_postfix_logs:
+    name: heymail_prod_dsn_postfix_logs
+
+  dsn_events:
+    name: heymail_prod_dsn_events
 
   postfix_queue:
     name: heymail_prod_postfix_queue
