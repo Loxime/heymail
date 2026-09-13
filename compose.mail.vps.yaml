@@ -396,6 +396,7 @@ services:
       MAILER_DSN: "null://null"
 
       OVH_DNS_ZONE: ${OVH_DNS_ZONE:?required}
+      HEYMAIL_CONSOLE_DOMAIN: ${HEYMAIL_CONSOLE_DOMAIN:?required}
       HEYMAIL_BOUNCE_DOMAIN: ${HEYMAIL_BOUNCE_DOMAIN:?required}
       HEYMAIL_PUBLIC_IPV4: ${HEYMAIL_PUBLIC_IPV4:?required}
       OVH_APPLICATION_KEY_FILE: /run/secrets/ovh_application_key

@@ -11,6 +11,7 @@ use RuntimeException;
 final class OvhDnsPublisher
 {
     private string $zone;
+    private string $consoleDomain;
     private string $bounceDomain;
     private string $publicIpv4;
 
@@ -18,6 +19,7 @@ final class OvhDnsPublisher
         private readonly Connection $connection,
         private readonly OvhApiClient $client,
         string $zone,
+        string $consoleDomain,
         string $bounceDomain,
         string $publicIpv4,
     ) {
@@ -28,12 +30,29 @@ final class OvhDnsPublisher
                 )
             )->value;
 
+        $this->consoleDomain =
+            (
+                new DomainName(
+                    $consoleDomain,
+                )
+            )->value;
+
         $this->bounceDomain =
             (
                 new DomainName(
                     $bounceDomain,
                 )
             )->value;
+
+        if (
+            !$this->isManagedDomain(
+                $this->consoleDomain,
+            )
+        ) {
+            throw new RuntimeException(
+                'Console domain is outside managed zone.',
+            );
+        }
 
         if (
             !$this->isManagedDomain(
@@ -86,6 +105,27 @@ SQL
 
         $results = [];
         $changed = false;
+
+        $action =
+            $this->client
+                ->syncARecord(
+                    $this->zone,
+                    $this->relativeName(
+                        $this->consoleDomain,
+                    ),
+                    $this->publicIpv4,
+                );
+
+        $results[] = [
+            'record'
+                => 'A '
+                . $this->consoleDomain,
+            'action' => $action,
+        ];
+
+        if ($action !== 'unchanged') {
+            $changed = true;
+        }
 
         $action =
             $this->client
