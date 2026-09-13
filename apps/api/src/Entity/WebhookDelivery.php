@@ -6,8 +6,11 @@ namespace App\Entity;
 
 use App\Enum\WebhookDeliveryStatus;
 use DateTimeImmutable;
+use DateTimeZone;
 use Doctrine\DBAL\Types\Types;
 use Doctrine\ORM\Mapping as ORM;
+use InvalidArgumentException;
+use LogicException;
 
 #[ORM\Entity]
 #[ORM\Table(name: 'webhook_delivery')]
@@ -33,6 +36,8 @@ use Doctrine\ORM\Mapping as ORM;
 )]
 final class WebhookDelivery
 {
+    public const int MAX_ATTEMPTS = 5;
+
     #[ORM\Id]
     #[ORM\GeneratedValue]
     #[ORM\Column(type: Types::BIGINT)]
@@ -143,5 +148,133 @@ final class WebhookDelivery
     public function getAttemptCount(): int
     {
         return $this->attemptCount;
+    }
+
+    public function getNextAttemptAt(): ?DateTimeImmutable
+    {
+        return $this->nextAttemptAt;
+    }
+
+    public function getLastError(): ?string
+    {
+        return $this->lastError;
+    }
+
+    public function markSucceeded(
+        ?DateTimeImmutable $at = null,
+    ): void {
+        if (
+            $this->status
+            === WebhookDeliveryStatus::SUCCEEDED
+        ) {
+            return;
+        }
+
+        if (
+            $this->status
+            !== WebhookDeliveryStatus::PENDING
+        ) {
+            throw new LogicException(
+                'Only pending webhook delivery can succeed.',
+            );
+        }
+
+        $this->attemptCount++;
+
+        $this->status =
+            WebhookDeliveryStatus::SUCCEEDED;
+
+        $this->queuedAt = null;
+        $this->nextAttemptAt = null;
+        $this->lastError = null;
+
+        $this->succeededAt =
+            $at
+            ?? self::now();
+    }
+
+    public function markFailedAttempt(
+        string $error,
+        ?DateTimeImmutable $at = null,
+    ): void {
+        if (
+            $this->status
+            !== WebhookDeliveryStatus::PENDING
+        ) {
+            return;
+        }
+
+        $error =
+            trim(
+                preg_replace(
+                    '/[\x00-\x1F\x7F]+/',
+                    ' ',
+                    $error,
+                )
+                ?? '',
+            );
+
+        if ($error === '') {
+            $error =
+                'Webhook delivery failed.';
+        }
+
+        if (strlen($error) > 512) {
+            $error =
+                substr(
+                    $error,
+                    0,
+                    512,
+                );
+        }
+
+        $this->attemptCount++;
+        $this->queuedAt = null;
+        $this->lastError = $error;
+
+        $occurredAt =
+            $at
+            ?? self::now();
+
+        if (
+            $this->attemptCount
+            >= self::MAX_ATTEMPTS
+        ) {
+            $this->status =
+                WebhookDeliveryStatus::DEAD;
+
+            $this->nextAttemptAt = null;
+
+            return;
+        }
+
+        $delaySeconds = match (
+            $this->attemptCount
+        ) {
+            1 => 5,
+            2 => 30,
+            3 => 120,
+            4 => 600,
+
+            default => throw new InvalidArgumentException(
+                'Invalid webhook retry attempt.',
+            ),
+        };
+
+        $this->nextAttemptAt =
+            $occurredAt->modify(
+                sprintf(
+                    '+%d seconds',
+                    $delaySeconds,
+                ),
+            );
+    }
+
+    private static function now(): DateTimeImmutable
+    {
+        return new DateTimeImmutable(
+            'now',
+            new DateTimeZone('UTC'),
+        );
     }
 }

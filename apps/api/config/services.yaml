@@ -9,6 +9,8 @@ parameters:
     env(DKIM_SELECTOR): 'hm1'
 
     env(WEBHOOK_KEK_FILE): '/run/secrets/webhook_kek_v1'
+    env(WEBHOOK_CA_FILE): ''
+    env(WEBHOOK_PRIVATE_HOST_ALLOWLIST): ''
 
 services:
     _defaults:
@@ -21,6 +23,11 @@ services:
     App\Query\MessageCursorCodec:
         arguments:
             $secret: '%kernel.secret%'
+
+    App\Webhook\WebhookHttpClient:
+        arguments:
+            $caFile: '%env(string:WEBHOOK_CA_FILE)%'
+            $privateHostAllowlist: '%env(string:WEBHOOK_PRIVATE_HOST_ALLOWLIST)%'
 
     App\Webhook\WebhookSecretCipher:
         arguments:

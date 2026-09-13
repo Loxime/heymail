@@ -431,6 +431,141 @@ services:
 
 
   # =========================================================================
+  # HTTPS webhook receiver laboratory
+  # =========================================================================
+
+  fake-webhook:
+    image: heymail-api:local
+
+    restart: unless-stopped
+
+    user: "${HEYMAIL_UID:?HEYMAIL_UID is required}:${HEYMAIL_GID:?HEYMAIL_GID is required}"
+
+    environment:
+      FAKE_WEBHOOK_CERT_FILE: /run/secrets/gateway_tls_cert
+      FAKE_WEBHOOK_KEY_FILE: /run/secrets/gateway_tls_key
+
+    secrets:
+      - gateway_tls_cert
+      - gateway_tls_key
+
+    networks:
+      webhook_net:
+        aliases:
+          - api.heymail.test
+
+    volumes:
+      - ./docker/webhook-lab/server.php:/opt/heymail/webhook-lab.php:ro
+
+    read_only: true
+
+    tmpfs:
+      - /tmp:size=8m,mode=1777
+      - /capture:size=16m,mode=0700,uid=${HEYMAIL_UID},gid=${HEYMAIL_GID}
+
+    security_opt:
+      - no-new-privileges:true
+
+    cap_drop:
+      - ALL
+
+    pids_limit: 30
+    mem_limit: 64m
+    cpus: 0.10
+
+    command:
+      - php
+      - /opt/heymail/webhook-lab.php
+
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "test",
+          "-f",
+          "/capture/ready"
+        ]
+      interval: 2s
+      timeout: 1s
+      retries: 10
+      start_period: 2s
+
+
+  # =========================================================================
+  # Signed webhook delivery worker
+  #
+  # Only this component may decrypt webhook signing secrets and perform
+  # outbound webhook HTTPS connections.
+  # =========================================================================
+
+  webhook-worker:
+    image: heymail-api:local
+
+    restart: unless-stopped
+
+    user: "${HEYMAIL_UID:?HEYMAIL_UID is required}:${HEYMAIL_GID:?HEYMAIL_GID is required}"
+
+    environment:
+      APP_ENV: prod
+      APP_DEBUG: "0"
+      DEFAULT_URI: "https://api.heymail.test"
+      APP_RUNTIME_OPTIONS: '{"disable_dotenv":true}'
+      APP_SECRET_FILE: /run/secrets/app_secret
+      MAILER_DSN: "null://null"
+      WEBHOOK_KEK_FILE: /run/secrets/webhook_kek_v1
+
+      DB_HOST: database
+      DB_PORT: "5432"
+      DB_NAME: ${POSTGRES_DB:?POSTGRES_DB is required}
+      DB_USER: heymail_app
+      DB_PASSWORD_FILE: /run/secrets/postgres_app_password
+
+    secrets:
+      - app_secret
+      - postgres_app_password
+      - webhook_kek_v1
+
+    networks:
+      - data_net
+      - webhook_net
+
+    depends_on:
+      database:
+        condition: service_healthy
+
+      database-bootstrap:
+        condition: service_completed_successfully
+
+    read_only: true
+
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+      - /app/var:size=32m,mode=0770,uid=${HEYMAIL_UID},gid=${HEYMAIL_GID}
+
+    security_opt:
+      - no-new-privileges:true
+
+    cap_drop:
+      - ALL
+
+    pids_limit: 50
+    mem_limit: 192m
+    cpus: 0.25
+
+    command:
+      - php
+      - bin/console
+      - messenger:consume
+      - webhook_delivery
+      - --time-limit=3600
+      - --memory-limit=128M
+      - --sleep=1
+      - --no-interaction
+
+    stop_grace_period: 15s
+
+
+  # =========================================================================
   # Sending-domain DNS ownership worker
   #
   # Consumes only DNS verification jobs.
@@ -1230,6 +1365,10 @@ networks:
     name: heymail_dns_lab
     driver: bridge
     internal: true
+
+  webhook_net:
+    name: heymail_webhook
+    driver: bridge
 
 
 volumes:

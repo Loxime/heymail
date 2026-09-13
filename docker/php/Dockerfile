@@ -43,7 +43,9 @@ ARG HEYMAIL_GID=1000
 RUN set -eux; \
     addgroup -g "${HEYMAIL_GID}" -S heymail; \
     adduser -u "${HEYMAIL_UID}" -S -D -G heymail heymail; \
-    apk add --no-cache libpq; \
+    apk add --no-cache \
+        ca-certificates \
+        libpq; \
     apk add --no-cache --virtual .build-deps \
         ${PHPIZE_DEPS} \
         postgresql-dev; \
