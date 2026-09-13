@@ -1,0 +1,11 @@
+[Unit]
+Description=Pull HeyMail encrypted production backup daily
+
+[Timer]
+OnCalendar=*-*-* 04:00:00 UTC
+Persistent=true
+RandomizedDelaySec=15m
+Unit=heymail-backup-pull.service
+
+[Install]
+WantedBy=timers.target

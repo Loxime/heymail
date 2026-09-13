@@ -1,0 +1,21 @@
+[Unit]
+Description=Pull encrypted HeyMail production backup off-site
+ConditionPathExists=%h/.config/heymail/backup-pull-ed25519
+ConditionPathExists=%h/.config/heymail/backup-age.key
+
+[Service]
+Type=oneshot
+
+WorkingDirectory=%h/heymail
+
+Environment=HEYMAIL_BACKUP_REMOTE=ubuntu@51.91.126.247
+Environment=HEYMAIL_OFFSITE_RETENTION_DAYS=30
+
+ExecStart=%h/heymail/ops/pull-production-backup.sh
+
+UMask=0077
+Nice=10
+
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
