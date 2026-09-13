@@ -12,12 +12,24 @@ import {
   Webhook,
 } from 'lucide-react'
 import {
+  useEffect,
   useState,
 } from 'react'
 import {
+  useQuery,
+} from '@tanstack/react-query'
+import {
   NavLink,
   Outlet,
+  useLocation,
 } from 'react-router-dom'
+
+import {
+  apiGet,
+} from '../../lib/api/client'
+import type {
+  DashboardResponse,
+} from '../../lib/api/types'
 
 const groups = [
   {
@@ -95,6 +107,47 @@ export function AppShell() {
     setMobileNavigationOpen,
   ] = useState(false)
 
+  const location =
+    useLocation()
+
+  const apiStatus =
+    useQuery({
+      queryKey: [
+        'dashboard',
+      ],
+
+      queryFn: () =>
+        apiGet<DashboardResponse>(
+          '/api/v1/dashboard',
+        ),
+
+      refetchInterval: 30_000,
+      retry: false,
+    })
+
+  useEffect(
+    () => {
+      setMobileNavigationOpen(
+        false,
+      )
+
+      window.scrollTo({
+        top: 0,
+        behavior: 'auto',
+      })
+    },
+    [
+      location.pathname,
+    ],
+  )
+
+  const apiLabel =
+    apiStatus.isPending
+      ? 'Connecting…'
+      : apiStatus.isError
+        ? 'API unavailable'
+        : 'API connected'
+
   return (
     <div className="app-shell">
       <aside
@@ -159,7 +212,13 @@ export function AppShell() {
 
         <div className="sidebar__footer">
           <NavLink
-            className="nav-item"
+            className={({
+              isActive,
+            }) =>
+              isActive
+                ? 'nav-item nav-item--active'
+                : 'nav-item'
+            }
             to="/settings"
           >
             <Settings size={18} />
@@ -196,11 +255,18 @@ export function AppShell() {
             <Menu size={20} />
           </button>
 
-          <div className="topbar__environment">
+          <div
+            aria-live="polite"
+            className={
+              apiStatus.isError
+                ? 'topbar__environment topbar__environment--offline'
+                : 'topbar__environment'
+            }
+          >
             <Activity size={16} />
 
             <span>
-              API connected
+              {apiLabel}
             </span>
           </div>
 

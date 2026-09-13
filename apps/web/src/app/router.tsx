@@ -33,48 +33,11 @@ import {
   SettingsPage,
 } from '../features/settings/SettingsPage'
 import {
+  NotFoundPage,
+} from '../features/system/NotFoundPage'
+import {
   WebhooksPage,
 } from '../features/webhooks/WebhooksPage'
-
-function PlaceholderPage({
-  eyebrow,
-  title,
-}: {
-  eyebrow: string
-  title: string
-}) {
-  return (
-    <div className="page">
-      <header className="page-heading">
-        <div>
-          <span className="eyebrow">
-            {eyebrow}
-          </span>
-
-          <h1>
-            {title}
-          </h1>
-
-          <p>
-            This workspace is ready for
-            the next HeyMail frontend
-            sprint.
-          </p>
-        </div>
-      </header>
-
-      <section className="panel empty-panel">
-        <strong>
-          {title}
-        </strong>
-
-        <span>
-          Coming next.
-        </span>
-      </section>
-    </div>
-  )
-}
 
 export const router =
   createBrowserRouter([
@@ -131,6 +94,11 @@ export const router =
         {
           path: 'settings',
           element: <SettingsPage />,
+        },
+
+        {
+          path: '*',
+          element: <NotFoundPage />,
         },
       ],
     },

@@ -3030,3 +3030,209 @@ a {
       1 / -1;
   }
 }
+
+/* final-product-polish */
+
+html {
+  scrollbar-gutter: stable;
+}
+
+body {
+  overflow-x: hidden;
+}
+
+button,
+a,
+input,
+select,
+textarea {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button,
+a {
+  transition:
+    color 120ms ease,
+    background-color 120ms ease,
+    border-color 120ms ease,
+    opacity 120ms ease;
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid #60a5fa;
+  outline-offset: 2px;
+}
+
+.button:hover:not(:disabled) {
+  filter: brightness(0.98);
+}
+
+.button--primary:hover:not(:disabled) {
+  filter: brightness(0.94);
+}
+
+.topbar__environment--offline {
+  color: #b91c1c;
+}
+
+.topbar__environment--offline::before {
+  background: #ef4444;
+}
+
+.table-scroll {
+  overscroll-behavior-x: contain;
+}
+
+.data-table tbody tr {
+  transition:
+    background-color 100ms ease;
+}
+
+.not-found {
+  display: flex;
+  min-height: calc(
+    100vh
+    - var(--hm-topbar-height)
+    - 120px
+  );
+  max-width: 520px;
+  align-items: flex-start;
+  justify-content: center;
+  flex-direction: column;
+
+  margin: 0 auto;
+}
+
+.not-found__icon {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+
+  margin-bottom: 18px;
+
+  color: #b45309;
+  background: #fffbeb;
+
+  border-radius: 11px;
+}
+
+.not-found h1 {
+  margin: 7px 0 8px;
+
+  color: #162033;
+
+  font-size: 30px;
+  letter-spacing: -0.025em;
+}
+
+.not-found p {
+  margin: 0 0 20px;
+
+  color: var(--hm-text-muted);
+
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+@media (max-width: 760px) {
+  .topbar__account .account-copy {
+    display: none;
+  }
+
+  .page-heading {
+    gap: 15px;
+    margin-bottom: 20px;
+  }
+
+  .page-heading h1 {
+    font-size: 25px;
+  }
+
+  .page-heading p {
+    font-size: 12px;
+    line-height: 1.5;
+  }
+
+  .panel__header {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
+  .data-table th,
+  .data-table td {
+    padding-left: 14px;
+    padding-right: 14px;
+  }
+
+  .resource-card__header,
+  .resource-card__section {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
+  .app-content {
+    padding-top: 22px;
+    padding-bottom: 32px;
+  }
+
+  .not-found {
+    min-height: 60vh;
+  }
+}
+
+@media (max-width: 480px) {
+  .topbar {
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+
+  .app-content {
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+
+  .period-pill {
+    width: 100%;
+
+    text-align: center;
+  }
+
+  .recipient-row {
+    grid-template-columns:
+      minmax(0, 1fr)
+      30px;
+  }
+
+  .recipient-row input:nth-child(2) {
+    grid-column:
+      1 / -1;
+    grid-row: 2;
+  }
+
+  .recipient-remove {
+    grid-column: 2;
+    grid-row: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+
+    animation-duration:
+      0.01ms !important;
+    animation-iteration-count:
+      1 !important;
+
+    transition-duration:
+      0.01ms !important;
+  }
+}
+
