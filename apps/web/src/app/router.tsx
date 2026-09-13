@@ -24,6 +24,15 @@ import {
   SendersPage,
 } from '../features/senders/SendersPage'
 import {
+  CredentialsPage,
+} from '../features/developer/CredentialsPage'
+import {
+  DocumentationPage,
+} from '../features/developer/DocumentationPage'
+import {
+  SettingsPage,
+} from '../features/settings/SettingsPage'
+import {
   WebhooksPage,
 } from '../features/webhooks/WebhooksPage'
 
@@ -111,32 +120,17 @@ export const router =
 
         {
           path: 'credentials',
-          element: (
-            <PlaceholderPage
-              eyebrow="Developer"
-              title="API credentials"
-            />
-          ),
+          element: <CredentialsPage />,
         },
 
         {
           path: 'docs',
-          element: (
-            <PlaceholderPage
-              eyebrow="Developer"
-              title="Documentation"
-            />
-          ),
+          element: <DocumentationPage />,
         },
 
         {
           path: 'settings',
-          element: (
-            <PlaceholderPage
-              eyebrow="Account"
-              title="Settings"
-            />
-          ),
+          element: <SettingsPage />,
         },
       ],
     },

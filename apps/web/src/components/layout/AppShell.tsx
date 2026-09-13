@@ -214,7 +214,7 @@ export function AppShell() {
                 HeyMail
               </strong>
               <span>
-                Production
+                Local console
               </span>
             </div>
           </div>
