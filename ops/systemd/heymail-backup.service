@@ -1,0 +1,26 @@
+[Unit]
+Description=HeyMail encrypted production backup
+Requires=docker.service
+After=docker.service
+ConditionPathExists=/home/ubuntu/sites/heymail/.env.prod
+ConditionPathExists=/home/ubuntu/.config/heymail/backup-age.recipient
+
+[Service]
+Type=oneshot
+User=ubuntu
+Group=ubuntu
+SupplementaryGroups=docker
+
+WorkingDirectory=/home/ubuntu/sites/heymail
+Environment=HOME=/home/ubuntu
+Environment=HEYMAIL_BACKUP_RETENTION_DAYS=14
+
+ExecStart=/home/ubuntu/sites/heymail/ops/backup-production-daily.sh
+
+UMask=0077
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+
+NoNewPrivileges=true
+PrivateTmp=true

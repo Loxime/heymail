@@ -77,7 +77,7 @@ tar \
 
 test -s "$SECRETS_ARCHIVE"
 
-echo "PASS: secrets encrypted with SSH recipient"
+echo "PASS: secrets encrypted with dedicated age recipient"
 
 {
     echo "timestamp=${TIMESTAMP}"
