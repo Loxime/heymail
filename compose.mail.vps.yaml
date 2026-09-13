@@ -379,6 +379,65 @@ services:
       - --no-interaction
 
 
+  dns-publisher:
+    image: heymail-api:prod
+    restart: unless-stopped
+
+    user: "${HEYMAIL_UID}:${HEYMAIL_GID}"
+
+    environment:
+      APP_ENV: prod
+      APP_DEBUG: "0"
+      APP_RUNTIME_OPTIONS: '{"disable_dotenv":true}'
+      APP_SECRET_FILE: /run/secrets/app_secret
+
+      MAILER_DSN: "null://null"
+
+      OVH_DNS_ZONE: ${OVH_DNS_ZONE:?required}
+      OVH_APPLICATION_KEY_FILE: /run/secrets/ovh_application_key
+      OVH_APPLICATION_SECRET_FILE: /run/secrets/ovh_application_secret
+      OVH_CONSUMER_KEY_FILE: /run/secrets/ovh_consumer_key
+
+      DB_HOST: database
+      DB_PORT: "5432"
+      DB_NAME: ${POSTGRES_DB}
+      DB_USER: heymail_app
+      DB_PASSWORD_FILE: /run/secrets/postgres_app_password
+
+    secrets:
+      - app_secret
+      - postgres_app_password
+      - ovh_application_key
+      - ovh_application_secret
+      - ovh_consumer_key
+
+    networks:
+      - data_net
+      - ovh_egress
+
+    depends_on:
+      database-migrate:
+        condition: service_completed_successfully
+
+    read_only: true
+
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+      - /app/var:size=32m,mode=0770,uid=${HEYMAIL_UID},gid=${HEYMAIL_GID}
+
+    security_opt:
+      - no-new-privileges:true
+
+    cap_drop:
+      - ALL
+
+    command:
+      - php
+      - bin/console
+      - app:publish-ovh-dns
+      - --sleep-seconds=60
+
+
 networks:
 
   mail_net:
@@ -395,6 +454,9 @@ networks:
   dns_egress:
     name: heymail_prod_dns_egress
 
+  ovh_egress:
+    name: heymail_prod_ovh_egress
+
 
 volumes:
 
@@ -409,3 +471,15 @@ volumes:
 
   rspamd_dkim_private:
     name: heymail_prod_dkim_private
+
+
+secrets:
+
+  ovh_application_key:
+    file: ./secrets/prod/ovh_application_key
+
+  ovh_application_secret:
+    file: ./secrets/prod/ovh_application_secret
+
+  ovh_consumer_key:
+    file: ./secrets/prod/ovh_consumer_key

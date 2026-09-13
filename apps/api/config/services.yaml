@@ -3,6 +3,11 @@
 parameters:
     env(HEYMAIL_SEND_QUOTA_PER_HOUR): '600'
 
+    env(OVH_DNS_ZONE): 'example.invalid'
+    env(OVH_APPLICATION_KEY_FILE): '/run/secrets/ovh_application_key'
+    env(OVH_APPLICATION_SECRET_FILE): '/run/secrets/ovh_application_secret'
+    env(OVH_CONSUMER_KEY_FILE): '/run/secrets/ovh_consumer_key'
+
     env(DNS_VERIFY_HOST): 'fake-dns'
     env(DNS_VERIFY_PORT): '8053'
     env(DNS_VERIFY_TIMEOUT_MS): '2000'
@@ -49,6 +54,16 @@ services:
     App\Mail\PostfixDeliveryLogParser:
         arguments:
             $bounceDomain: '%env(string:HEYMAIL_BOUNCE_DOMAIN)%'
+
+    App\Dns\OvhApiClient:
+        arguments:
+            $applicationKeyFile: '%env(string:OVH_APPLICATION_KEY_FILE)%'
+            $applicationSecretFile: '%env(string:OVH_APPLICATION_SECRET_FILE)%'
+            $consumerKeyFile: '%env(string:OVH_CONSUMER_KEY_FILE)%'
+
+    App\Dns\OvhDnsPublisher:
+        arguments:
+            $zone: '%env(string:OVH_DNS_ZONE)%'
 
     App\Api\ApiSendQuotaLimiter:
         arguments:
