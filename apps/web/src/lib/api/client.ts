@@ -96,19 +96,22 @@ export function apiGet<T>(
 export function apiPost<T>(
   path: string,
   body?: unknown,
+  headers: Record<string, string> = {},
 ): Promise<T> {
   return request<T>(
     path,
     {
       method: 'POST',
 
-      headers:
-        body === undefined
-          ? undefined
+      headers: {
+        ...(body === undefined
+          ? {}
           : {
               'Content-Type':
                 'application/json',
-            },
+            }),
+        ...headers,
+      },
 
       body:
         body === undefined

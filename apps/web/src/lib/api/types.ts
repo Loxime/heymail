@@ -163,3 +163,23 @@ export interface WebhookCreateResponse
   secret: string
 }
 
+export interface EmailAddressPayload {
+  email: string
+  name?: string
+}
+
+export interface SendMessagePayload {
+  from: EmailAddressPayload
+  to: EmailAddressPayload[]
+  subject: string
+  text?: string
+  html?: string
+  replyTo?: EmailAddressPayload
+}
+
+export interface SendMessageResponse {
+  messageId: number
+  status: string
+  replayed: boolean
+}
+

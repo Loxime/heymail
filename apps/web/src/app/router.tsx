@@ -15,6 +15,9 @@ import {
   MessagesPage,
 } from '../features/messages/MessagesPage'
 import {
+  SendApiPage,
+} from '../features/send/SendApiPage'
+import {
   DomainsPage,
 } from '../features/domains/DomainsPage'
 import {
@@ -88,12 +91,7 @@ export const router =
 
         {
           path: 'send',
-          element: (
-            <PlaceholderPage
-              eyebrow="Transactional"
-              title="Send API"
-            />
-          ),
+          element: <SendApiPage />,
         },
 
         {
