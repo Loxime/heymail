@@ -50,6 +50,4 @@ COPY --chmod=0444 \
 
 USER heymail:heymail
 
-ENTRYPOINT [
-    "/usr/local/bin/heymail-edge-entrypoint"
-]
+ENTRYPOINT ["/usr/local/bin/heymail-edge-entrypoint"]

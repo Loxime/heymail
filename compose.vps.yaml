@@ -137,6 +137,18 @@ services:
     cap_drop:
       - ALL
 
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "php",
+          "/usr/local/bin/heymail-healthcheck.php"
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
 
   fpm-socket-bootstrap:
     image: heymail-api:prod
