@@ -1,0 +1,385 @@
+name: heymail-prod
+
+services:
+
+  database:
+    image: postgres:18.4-alpine3.23
+    restart: unless-stopped
+
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?required}
+      POSTGRES_USER: ${POSTGRES_USER:?required}
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+
+    secrets:
+      - postgres_password
+
+    volumes:
+      - postgres_data:/var/lib/postgresql
+
+    networks:
+      - data_net
+
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+    security_opt:
+      - no-new-privileges:true
+
+
+  database-bootstrap:
+    image: postgres:18.4-alpine3.23
+    restart: "no"
+
+    entrypoint:
+      - /bin/sh
+      - /opt/heymail/bootstrap-roles.sh
+
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?required}
+      POSTGRES_USER: ${POSTGRES_USER:?required}
+      PGHOST: database
+      PGPORT: "5432"
+
+    secrets:
+      - postgres_password
+      - postgres_app_password
+      - postgres_migrator_password
+
+    volumes:
+      - ./docker/postgres/bootstrap/bootstrap-roles.sh:/opt/heymail/bootstrap-roles.sh:ro
+
+    networks:
+      - data_net
+
+    depends_on:
+      database:
+        condition: service_healthy
+
+
+  api:
+    build:
+      context: .
+      dockerfile: docker/php/Dockerfile
+      args:
+        HEYMAIL_UID: ${HEYMAIL_UID}
+        HEYMAIL_GID: ${HEYMAIL_GID}
+
+    image: heymail-api:prod
+    restart: unless-stopped
+
+    user: "${HEYMAIL_UID}:${HEYMAIL_GID}"
+
+    environment:
+      APP_ENV: prod
+      APP_DEBUG: "0"
+      APP_RUNTIME_OPTIONS: '{"disable_dotenv":true}'
+
+      DEFAULT_URI: ${HEYMAIL_API_URI}
+      APP_SECRET_FILE: /run/secrets/app_secret
+
+      MAILER_DSN: "null://null"
+
+      HEYMAIL_BOUNCE_DOMAIN: ${HEYMAIL_BOUNCE_DOMAIN}
+
+      PAYLOAD_KEK_FILE: /run/secrets/payload_kek_v1
+      WEBHOOK_KEK_FILE: /run/secrets/webhook_kek_v1
+
+      HEYMAIL_API_KEY_FILE: /run/secrets/api_key
+      HEYMAIL_API_SECRET_FILE: /run/secrets/api_secret
+
+      DB_HOST: database
+      DB_PORT: "5432"
+      DB_NAME: ${POSTGRES_DB}
+      DB_USER: heymail_app
+      DB_PASSWORD_FILE: /run/secrets/postgres_app_password
+
+    secrets:
+      - app_secret
+      - postgres_app_password
+      - payload_kek_v1
+      - webhook_kek_v1
+      - api_key
+      - api_secret
+
+    volumes:
+      - api_fpm_socket:/run/heymail-fpm
+
+    networks:
+      - data_net
+
+    depends_on:
+      database:
+        condition: service_healthy
+
+      database-bootstrap:
+        condition: service_completed_successfully
+
+      fpm-socket-bootstrap:
+        condition: service_completed_successfully
+
+    read_only: true
+
+    tmpfs:
+      - /tmp:size=32m,mode=1777
+      - /app/var:size=128m,mode=0770,uid=${HEYMAIL_UID},gid=${HEYMAIL_GID}
+
+    security_opt:
+      - no-new-privileges:true
+
+    cap_drop:
+      - ALL
+
+
+  fpm-socket-bootstrap:
+    image: heymail-api:prod
+    restart: "no"
+
+    user: "0:0"
+    network_mode: none
+    read_only: true
+
+    entrypoint:
+      - /bin/sh
+      - -ec
+
+    command:
+      - >-
+        chmod 0770 /run/heymail-fpm
+        && chown ${HEYMAIL_UID}:${HEYMAIL_GID}
+        /run/heymail-fpm
+
+    volumes:
+      - api_fpm_socket:/run/heymail-fpm
+
+    cap_drop:
+      - ALL
+
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - FOWNER
+
+
+  database-migrate:
+    image: heymail-api:prod
+    restart: "no"
+
+    user: "${HEYMAIL_UID}:${HEYMAIL_GID}"
+
+    environment:
+      APP_ENV: prod
+      APP_DEBUG: "0"
+      APP_RUNTIME_OPTIONS: '{"disable_dotenv":true}'
+      APP_SECRET_FILE: /run/secrets/app_secret
+
+      MAILER_DSN: "null://null"
+      HEYMAIL_BOUNCE_DOMAIN: ${HEYMAIL_BOUNCE_DOMAIN}
+
+      DB_HOST: database
+      DB_PORT: "5432"
+      DB_NAME: ${POSTGRES_DB}
+      DB_USER: heymail_migrator
+      DB_PASSWORD_FILE: /run/secrets/postgres_migrator_password
+
+    secrets:
+      - app_secret
+      - postgres_migrator_password
+
+    networks:
+      - data_net
+
+    depends_on:
+      database-bootstrap:
+        condition: service_completed_successfully
+
+    entrypoint:
+      - php
+      - bin/console
+      - doctrine:migrations:migrate
+      - --no-interaction
+      - --allow-no-migration
+
+
+  webhook-outbox:
+    image: heymail-api:prod
+    restart: unless-stopped
+
+    user: "${HEYMAIL_UID}:${HEYMAIL_GID}"
+
+    environment:
+      APP_ENV: prod
+      APP_DEBUG: "0"
+      APP_RUNTIME_OPTIONS: '{"disable_dotenv":true}'
+      APP_SECRET_FILE: /run/secrets/app_secret
+
+      MAILER_DSN: "null://null"
+
+      DB_HOST: database
+      DB_PORT: "5432"
+      DB_NAME: ${POSTGRES_DB}
+      DB_USER: heymail_app
+      DB_PASSWORD_FILE: /run/secrets/postgres_app_password
+
+    secrets:
+      - app_secret
+      - postgres_app_password
+
+    networks:
+      - data_net
+
+    depends_on:
+      database-migrate:
+        condition: service_completed_successfully
+
+    command:
+      - php
+      - bin/console
+      - app:webhook-outbox
+      - --batch=50
+      - --sleep-ms=1000
+
+
+  webhook-worker:
+    image: heymail-api:prod
+    restart: unless-stopped
+
+    user: "${HEYMAIL_UID}:${HEYMAIL_GID}"
+
+    environment:
+      APP_ENV: prod
+      APP_DEBUG: "0"
+      APP_RUNTIME_OPTIONS: '{"disable_dotenv":true}'
+      APP_SECRET_FILE: /run/secrets/app_secret
+
+      MAILER_DSN: "null://null"
+
+      WEBHOOK_KEK_FILE: /run/secrets/webhook_kek_v1
+      WEBHOOK_CA_FILE: ""
+      WEBHOOK_PRIVATE_HOST_ALLOWLIST: ""
+
+      DB_HOST: database
+      DB_PORT: "5432"
+      DB_NAME: ${POSTGRES_DB}
+      DB_USER: heymail_app
+      DB_PASSWORD_FILE: /run/secrets/postgres_app_password
+
+    secrets:
+      - app_secret
+      - postgres_app_password
+      - webhook_kek_v1
+
+    networks:
+      - data_net
+      - webhook_egress
+
+    depends_on:
+      database-migrate:
+        condition: service_completed_successfully
+
+    command:
+      - php
+      - bin/console
+      - messenger:consume
+      - webhook_delivery
+      - --time-limit=3600
+      - --memory-limit=128M
+      - --sleep=1
+      - --no-interaction
+
+
+  edge:
+    build:
+      context: .
+      dockerfile: docker/edge/Dockerfile
+      args:
+        HEYMAIL_UID: ${HEYMAIL_UID}
+        HEYMAIL_GID: ${HEYMAIL_GID}
+
+    image: heymail-edge:prod
+    restart: unless-stopped
+
+    user: "${HEYMAIL_UID}:${HEYMAIL_GID}"
+
+    ports:
+      - "127.0.0.1:3040:8081"
+      - "127.0.0.1:3041:8080"
+
+    volumes:
+      - api_fpm_socket:/run/heymail-fpm:ro
+
+    secrets:
+      - api_key
+      - api_secret
+      - console_htpasswd
+
+    depends_on:
+      api:
+        condition: service_healthy
+
+    read_only: true
+
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+
+    security_opt:
+      - no-new-privileges:true
+
+    cap_drop:
+      - ALL
+
+
+networks:
+
+  data_net:
+    name: heymail_prod_data
+    internal: true
+
+  webhook_egress:
+    name: heymail_prod_webhook_egress
+
+
+volumes:
+
+  postgres_data:
+    name: heymail_prod_postgres
+
+  api_fpm_socket:
+    name: heymail_prod_fpm_socket
+
+
+secrets:
+
+  postgres_password:
+    file: ./secrets/prod/postgres_password
+
+  postgres_app_password:
+    file: ./secrets/prod/postgres_app_password
+
+  postgres_migrator_password:
+    file: ./secrets/prod/postgres_migrator_password
+
+  app_secret:
+    file: ./secrets/prod/app_secret
+
+  payload_kek_v1:
+    file: ./secrets/prod/payload_kek_v1
+
+  webhook_kek_v1:
+    file: ./secrets/prod/webhook_kek_v1
+
+  api_key:
+    file: ./secrets/prod/api_key
+
+  api_secret:
+    file: ./secrets/prod/api_secret
+
+  console_htpasswd:
+    file: ./secrets/prod/console_htpasswd
