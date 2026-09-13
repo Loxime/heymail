@@ -20,6 +20,9 @@ import {
 import {
   SendersPage,
 } from '../features/senders/SendersPage'
+import {
+  WebhooksPage,
+} from '../features/webhooks/WebhooksPage'
 
 function PlaceholderPage({
   eyebrow,
@@ -105,12 +108,7 @@ export const router =
 
         {
           path: 'webhooks',
-          element: (
-            <PlaceholderPage
-              eyebrow="Configuration"
-              title="Webhooks"
-            />
-          ),
+          element: <WebhooksPage />,
         },
 
         {

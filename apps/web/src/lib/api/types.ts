@@ -141,3 +141,25 @@ export interface SenderIdentityCreateResponse
   replayed: boolean
 }
 
+export type WebhookEventType =
+  | 'delivered'
+  | 'tempfail'
+  | 'bounced'
+
+export interface WebhookEndpoint {
+  webhookId: string
+  url: string
+  events: WebhookEventType[]
+  enabled: boolean
+  createdAt: string
+}
+
+export interface WebhookListResponse {
+  items: WebhookEndpoint[]
+}
+
+export interface WebhookCreateResponse
+  extends WebhookEndpoint {
+  secret: string
+}
+
