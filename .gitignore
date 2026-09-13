@@ -89,3 +89,6 @@ playwright-report/
 *.sql
 *.sqlite
 *.sqlite3
+apps/web/dist/
+apps/web/node_modules/
+apps/web/tsconfig.tsbuildinfo
