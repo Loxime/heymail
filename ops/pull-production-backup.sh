@@ -30,7 +30,10 @@ cleanup() {
 trap cleanup EXIT
 
 ssh \
+    -F /dev/null \
+    -T \
     -i "$KEY_FILE" \
+    -o "UserKnownHostsFile=$HOME/.ssh/known_hosts" \
     -o BatchMode=yes \
     -o IdentitiesOnly=yes \
     -o StrictHostKeyChecking=yes \
