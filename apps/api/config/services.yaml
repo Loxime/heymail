@@ -8,6 +8,8 @@ parameters:
     env(DKIM_PRIVATE_DIRECTORY): '/run/heymail-dkim'
     env(DKIM_SELECTOR): 'hm1'
 
+    env(WEBHOOK_KEK_FILE): '/run/secrets/webhook_kek_v1'
+
 services:
     _defaults:
         autowire: true
@@ -19,6 +21,10 @@ services:
     App\Query\MessageCursorCodec:
         arguments:
             $secret: '%kernel.secret%'
+
+    App\Webhook\WebhookSecretCipher:
+        arguments:
+            $webhookKekFile: '%env(string:WEBHOOK_KEK_FILE)%'
 
     App\Mail\OutboundEmailPayloadCipher:
         arguments:
