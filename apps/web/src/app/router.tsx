@@ -14,6 +14,12 @@ import {
 import {
   MessagesPage,
 } from '../features/messages/MessagesPage'
+import {
+  DomainsPage,
+} from '../features/domains/DomainsPage'
+import {
+  SendersPage,
+} from '../features/senders/SendersPage'
 
 function PlaceholderPage({
   eyebrow,
@@ -89,22 +95,12 @@ export const router =
 
         {
           path: 'domains',
-          element: (
-            <PlaceholderPage
-              eyebrow="Configuration"
-              title="Domains"
-            />
-          ),
+          element: <DomainsPage />,
         },
 
         {
           path: 'senders',
-          element: (
-            <PlaceholderPage
-              eyebrow="Configuration"
-              title="Sender identities"
-            />
-          ),
+          element: <SendersPage />,
         },
 
         {

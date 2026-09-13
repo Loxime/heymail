@@ -77,3 +77,67 @@ export interface MessageDetailResponse {
   deliverySummary: DeliverySummary
   events: MessageEvent[]
 }
+
+export interface DnsRecord {
+  type: string
+  name: string
+  value: string
+}
+
+export interface DomainDkim {
+  ready: boolean
+  selector: string | null
+  type: string
+  name: string | null
+  value: string | null
+  provisionedAt: string | null
+}
+
+export interface SendingDomain {
+  id: number
+  domain: string
+  status: 'pending' | 'verified' | 'disabled'
+  verification: DnsRecord
+  dkim: DomainDkim
+  createdAt: string
+  verificationCheckedAt: string | null
+  verifiedAt: string | null
+  disabledAt: string | null
+}
+
+export interface SendingDomainListResponse {
+  items: SendingDomain[]
+}
+
+export interface SendingDomainCreateResponse
+  extends SendingDomain {
+  replayed: boolean
+}
+
+export interface DomainVerificationResponse
+  extends SendingDomain {
+  verificationQueued: boolean
+}
+
+export interface DomainDkimProvisionResponse
+  extends SendingDomain {
+  dkimProvisioningQueued: boolean
+}
+
+export interface SenderIdentity {
+  id: number
+  email: string
+  domain: string
+  authorized: boolean
+  createdAt: string
+}
+
+export interface SenderIdentityListResponse {
+  items: SenderIdentity[]
+}
+
+export interface SenderIdentityCreateResponse
+  extends SenderIdentity {
+  replayed: boolean
+}
+

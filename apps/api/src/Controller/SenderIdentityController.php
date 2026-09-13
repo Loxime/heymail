@@ -161,6 +161,49 @@ final readonly class SenderIdentityController
     }
 
     #[Route(
+        '/api/v1/senders',
+        name: 'api_v1_senders',
+        methods: ['GET'],
+    )]
+    public function list(
+        Request $request,
+    ): JsonResponse {
+        if (
+            !$this->credentials->authorizes(
+                $request,
+            )
+        ) {
+            return self::unauthorized();
+        }
+
+        $senders =
+            $this
+                ->entityManager
+                ->getRepository(
+                    SenderIdentity::class,
+                )
+                ->findBy(
+                    [],
+                    [
+                        'id' => 'DESC',
+                    ],
+                );
+
+        return new JsonResponse([
+            'items' =>
+                array_map(
+                    static fn (
+                        SenderIdentity $sender,
+                    ): array =>
+                        self::serializeSender(
+                            $sender,
+                        ),
+                    $senders,
+                ),
+        ]);
+    }
+
+    #[Route(
         '/api/v1/senders/{id}',
         name: 'api_v1_sender_status',
         requirements: [

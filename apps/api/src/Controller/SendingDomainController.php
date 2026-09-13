@@ -152,6 +152,49 @@ final readonly class SendingDomainController
     }
 
     #[Route(
+        '/api/v1/domains',
+        name: 'api_v1_domains',
+        methods: ['GET'],
+    )]
+    public function list(
+        Request $request,
+    ): JsonResponse {
+        if (
+            !$this->credentials->authorizes(
+                $request,
+            )
+        ) {
+            return self::unauthorized();
+        }
+
+        $domains =
+            $this
+                ->entityManager
+                ->getRepository(
+                    SendingDomain::class,
+                )
+                ->findBy(
+                    [],
+                    [
+                        'id' => 'DESC',
+                    ],
+                );
+
+        return new JsonResponse([
+            'items' =>
+                array_map(
+                    static fn (
+                        SendingDomain $domain,
+                    ): array =>
+                        self::serializeDomain(
+                            $domain,
+                        ),
+                    $domains,
+                ),
+        ]);
+    }
+
+    #[Route(
         '/api/v1/domains/{id}',
         name: 'api_v1_domain_status',
         requirements: [
