@@ -1,0 +1,411 @@
+services:
+
+  dkim-volume-bootstrap:
+    image: alpine:3.23.5
+    restart: "no"
+
+    user: "0:0"
+    network_mode: none
+
+    volumes:
+      - rspamd_dkim_private:/private
+
+    entrypoint:
+      - /bin/sh
+      - -ec
+
+    command:
+      - >-
+        chown ${HEYMAIL_UID}:101 /private
+        && chmod 0770 /private
+
+    security_opt:
+      - no-new-privileges:true
+
+    cap_drop:
+      - ALL
+
+    cap_add:
+      - CHOWN
+      - FOWNER
+
+
+  rspamd:
+    build:
+      context: .
+      dockerfile: docker/rspamd/Dockerfile
+
+    image: heymail-rspamd:prod
+    restart: unless-stopped
+
+    user: "100:101"
+
+    read_only: true
+
+    networks:
+      - filter_net
+
+    volumes:
+      - rspamd_dkim_private:/run/heymail-dkim:ro
+
+    expose:
+      - "11332"
+
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+      - /var/lib/rspamd:size=32m,uid=100,gid=101,mode=0750
+
+    depends_on:
+      dkim-volume-bootstrap:
+        condition: service_completed_successfully
+
+    security_opt:
+      - no-new-privileges:true
+
+    cap_drop:
+      - ALL
+
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "/usr/local/bin/heymail-rspamd-healthcheck"
+        ]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+      start_period: 30s
+
+
+  postfix:
+    build:
+      context: .
+      dockerfile: docker/postfix-prod/Dockerfile
+      args:
+        HEYMAIL_SMTP_HOSTNAME: ${HEYMAIL_SMTP_HOSTNAME}
+
+    image: heymail-postfix:prod
+    restart: unless-stopped
+
+    environment:
+      HEYMAIL_SMTP_HOSTNAME: ${HEYMAIL_SMTP_HOSTNAME}
+
+    read_only: true
+
+    networks:
+      mail_net:
+        aliases:
+          - postfix-mail
+      filter_net:
+      smtp_egress:
+
+    volumes:
+      - postfix_queue:/var/spool/postfix
+      - postfix_data:/var/lib/postfix
+      - postfix_logs:/var/log/postfix
+
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+      - /run:size=16m,mode=0755
+
+    depends_on:
+      rspamd:
+        condition: service_healthy
+
+    security_opt:
+      - no-new-privileges:true
+
+    cap_drop:
+      - ALL
+
+    cap_add:
+      - SETUID
+      - SETGID
+      - DAC_OVERRIDE
+
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "/usr/local/bin/heymail-postfix-healthcheck"
+        ]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+      start_period: 10s
+
+
+  mail-worker:
+    image: heymail-api:prod
+    restart: unless-stopped
+
+    user: "${HEYMAIL_UID}:${HEYMAIL_GID}"
+
+    environment:
+      APP_ENV: prod
+      APP_DEBUG: "0"
+      APP_RUNTIME_OPTIONS: '{"disable_dotenv":true}'
+      APP_SECRET_FILE: /run/secrets/app_secret
+
+      MAILER_DSN: "smtp://postfix-mail:10025"
+
+      HEYMAIL_BOUNCE_DOMAIN: ${HEYMAIL_BOUNCE_DOMAIN}
+
+      PAYLOAD_KEK_FILE: /run/secrets/payload_kek_v1
+
+      DB_HOST: database
+      DB_PORT: "5432"
+      DB_NAME: ${POSTGRES_DB}
+      DB_USER: heymail_app
+      DB_PASSWORD_FILE: /run/secrets/postgres_app_password
+
+    secrets:
+      - app_secret
+      - postgres_app_password
+      - payload_kek_v1
+
+    networks:
+      - data_net
+      - mail_net
+
+    depends_on:
+      database-migrate:
+        condition: service_completed_successfully
+
+      postfix:
+        condition: service_healthy
+
+    read_only: true
+
+    tmpfs:
+      - /tmp:size=32m,mode=1777
+      - /app/var:size=64m,mode=0770,uid=${HEYMAIL_UID},gid=${HEYMAIL_GID}
+
+    security_opt:
+      - no-new-privileges:true
+
+    cap_drop:
+      - ALL
+
+    command:
+      - php
+      - bin/console
+      - messenger:consume
+      - outbound
+      - --time-limit=3600
+      - --memory-limit=192M
+      - --sleep=1
+      - --no-interaction
+
+
+  delivery-observer:
+    image: heymail-api:prod
+    restart: unless-stopped
+
+    user: "${HEYMAIL_UID}:${HEYMAIL_GID}"
+
+    environment:
+      APP_ENV: prod
+      APP_DEBUG: "0"
+      APP_RUNTIME_OPTIONS: '{"disable_dotenv":true}'
+      APP_SECRET_FILE: /run/secrets/app_secret
+
+      MAILER_DSN: "null://null"
+
+      HEYMAIL_BOUNCE_DOMAIN: ${HEYMAIL_BOUNCE_DOMAIN}
+
+      DB_HOST: database
+      DB_PORT: "5432"
+      DB_NAME: ${POSTGRES_DB}
+      DB_USER: heymail_app
+      DB_PASSWORD_FILE: /run/secrets/postgres_app_password
+
+    secrets:
+      - app_secret
+      - postgres_app_password
+
+    volumes:
+      - postfix_logs:/var/log/postfix:ro
+
+    networks:
+      - data_net
+
+    depends_on:
+      postfix:
+        condition: service_healthy
+
+    read_only: true
+
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+      - /app/var:size=32m,mode=0770,uid=${HEYMAIL_UID},gid=${HEYMAIL_GID}
+
+    security_opt:
+      - no-new-privileges:true
+
+    cap_drop:
+      - ALL
+
+    command:
+      - php
+      - bin/console
+      - app:observe-postfix-delivery
+      - --file=/var/log/postfix/heymail.log
+
+
+  domain-verifier:
+    image: heymail-api:prod
+    restart: unless-stopped
+
+    user: "${HEYMAIL_UID}:${HEYMAIL_GID}"
+
+    environment:
+      APP_ENV: prod
+      APP_DEBUG: "0"
+      APP_RUNTIME_OPTIONS: '{"disable_dotenv":true}'
+      APP_SECRET_FILE: /run/secrets/app_secret
+
+      MAILER_DSN: "null://null"
+
+      HEYMAIL_BOUNCE_DOMAIN: ${HEYMAIL_BOUNCE_DOMAIN}
+
+      DNS_VERIFY_HOST: "1.1.1.1"
+      DNS_VERIFY_PORT: "53"
+      DNS_VERIFY_TIMEOUT_MS: "3000"
+
+      DB_HOST: database
+      DB_PORT: "5432"
+      DB_NAME: ${POSTGRES_DB}
+      DB_USER: heymail_app
+      DB_PASSWORD_FILE: /run/secrets/postgres_app_password
+
+    secrets:
+      - app_secret
+      - postgres_app_password
+
+    networks:
+      - data_net
+      - dns_egress
+
+    depends_on:
+      database-migrate:
+        condition: service_completed_successfully
+
+    read_only: true
+
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+      - /app/var:size=32m,mode=0770,uid=${HEYMAIL_UID},gid=${HEYMAIL_GID}
+
+    security_opt:
+      - no-new-privileges:true
+
+    cap_drop:
+      - ALL
+
+    command:
+      - php
+      - bin/console
+      - messenger:consume
+      - domain_verification
+      - --time-limit=3600
+      - --memory-limit=128M
+      - --sleep=1
+      - --no-interaction
+
+
+  dkim-provisioner:
+    image: heymail-api:prod
+    restart: unless-stopped
+
+    user: "${HEYMAIL_UID}:101"
+
+    environment:
+      APP_ENV: prod
+      APP_DEBUG: "0"
+      APP_RUNTIME_OPTIONS: '{"disable_dotenv":true}'
+      APP_SECRET_FILE: /run/secrets/app_secret
+
+      MAILER_DSN: "null://null"
+
+      HEYMAIL_BOUNCE_DOMAIN: ${HEYMAIL_BOUNCE_DOMAIN}
+
+      DKIM_PRIVATE_DIRECTORY: /run/heymail-dkim
+      DKIM_SELECTOR: hm1
+
+      DB_HOST: database
+      DB_PORT: "5432"
+      DB_NAME: ${POSTGRES_DB}
+      DB_USER: heymail_app
+      DB_PASSWORD_FILE: /run/secrets/postgres_app_password
+
+    secrets:
+      - app_secret
+      - postgres_app_password
+
+    volumes:
+      - rspamd_dkim_private:/run/heymail-dkim
+
+    networks:
+      - data_net
+
+    depends_on:
+      database-migrate:
+        condition: service_completed_successfully
+
+      dkim-volume-bootstrap:
+        condition: service_completed_successfully
+
+    read_only: true
+
+    tmpfs:
+      - /tmp:size=32m,mode=1777
+      - /app/var:size=64m,mode=0770,uid=${HEYMAIL_UID},gid=101
+
+    security_opt:
+      - no-new-privileges:true
+
+    cap_drop:
+      - ALL
+
+    command:
+      - php
+      - bin/console
+      - messenger:consume
+      - dkim_provisioning
+      - --time-limit=3600
+      - --memory-limit=128M
+      - --sleep=1
+      - --no-interaction
+
+
+networks:
+
+  mail_net:
+    name: heymail_prod_mail
+    internal: true
+
+  filter_net:
+    name: heymail_prod_filter
+    internal: true
+
+  smtp_egress:
+    name: heymail_prod_smtp_egress
+
+  dns_egress:
+    name: heymail_prod_dns_egress
+
+
+volumes:
+
+  postfix_queue:
+    name: heymail_prod_postfix_queue
+
+  postfix_data:
+    name: heymail_prod_postfix_data
+
+  postfix_logs:
+    name: heymail_prod_postfix_logs
+
+  rspamd_dkim_private:
+    name: heymail_prod_dkim_private
