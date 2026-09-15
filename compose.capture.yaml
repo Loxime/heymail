@@ -2,23 +2,70 @@ name: heymail-capture
 
 services:
   capture:
-    image: axllent/mailpit:latest
+    image: axllent/mailpit:v1.31.1@sha256:98b916bd3c8d61f7633a52d3ea2f58d00620cb01ca57ab59edde68c347a95365
     restart: unless-stopped
 
     environment:
       MP_MAX_MESSAGES: "5000"
-      MP_DATABASE: /data/mailpit.db
+      MP_DATABASE: /tmp/mailpit.db
+      MP_DISABLE_VERSION_CHECK: "true"
+      MP_ALLOWED_HOSTS: "localhost,127.0.0.1"
+
+    tmpfs:
+      - /tmp:size=128m,mode=1777
+
+    networks:
+      - capture_net
+
+    read_only: true
+
+    security_opt:
+      - no-new-privileges:true
+
+    cap_drop:
+      - ALL
+
+    pids_limit: 100
+    mem_limit: 256m
+    cpus: 0.50
+
+  ingress:
+    image: haproxy:3.2.23-alpine@sha256:6343ce34a132a5dceaa24767d739df2bd519f8f7c1079ae39e4821334e8eb42e
+    restart: unless-stopped
+
+    depends_on:
+      capture:
+        condition: service_healthy
 
     ports:
       - "${HEYMAIL_CAPTURE_BIND:-127.0.0.1}:${HEYMAIL_CAPTURE_SMTP_PORT:-1025}:1025"
       - "${HEYMAIL_CAPTURE_BIND:-127.0.0.1}:${HEYMAIL_CAPTURE_UI_PORT:-8025}:8025"
 
     volumes:
-      - capture_data:/data
+      - ./ops/capture/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+
+    networks:
+      - capture_net
+      - ingress_net
+
+    read_only: true
 
     security_opt:
       - no-new-privileges:true
 
-volumes:
-  capture_data:
-    name: heymail_capture_data
+    cap_drop:
+      - ALL
+
+    pids_limit: 50
+    mem_limit: 64m
+    cpus: 0.25
+
+networks:
+  capture_net:
+    name: heymail_capture_net
+    driver: bridge
+    internal: true
+
+  ingress_net:
+    name: heymail_capture_ingress_net
+    driver: bridge

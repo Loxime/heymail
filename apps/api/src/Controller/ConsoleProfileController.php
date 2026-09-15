@@ -588,12 +588,23 @@ SQL,
     private function profileDocument(
         array $user,
     ): array {
-        $sent = (int) $this->connection
+        $sentRaw = $this->connection
             ->fetchOne(
                 'SELECT COUNT(*) FROM outbound_message',
             );
 
-        $favorites = (int) $this->connection
+        if (
+            !is_int($sentRaw)
+            && !is_string($sentRaw)
+        ) {
+            throw new \RuntimeException(
+                'Unable to read outbound message count.',
+            );
+        }
+
+        $instanceSent = (int) $sentRaw;
+
+        $favoritesRaw = $this->connection
             ->fetchOne(
                 'SELECT COUNT(*) FROM console_favorite_contact WHERE user_id = :user_id',
                 [
@@ -601,10 +612,22 @@ SQL,
                 ],
             );
 
+        if (
+            !is_int($favoritesRaw)
+            && !is_string($favoritesRaw)
+        ) {
+            throw new \RuntimeException(
+                'Unable to read favorite contact count.',
+            );
+        }
+
+        $favorites = (int) $favoritesRaw;
+
         return [
             'user' => $user,
             'stats' => [
-                'messagesSent' => $sent,
+                'messagesSent' => $instanceSent,
+                'messagesSentScope' => 'instance',
                 'messagesReceived' => 0,
                 'messagesReceivedAvailable' => false,
                 'favoriteContacts' => $favorites,
