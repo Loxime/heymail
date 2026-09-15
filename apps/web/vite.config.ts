@@ -56,9 +56,7 @@ export default defineConfig({
                 `${apiKey}:${apiSecret}`,
                 'utf8',
               )
-              .toString(
-                'base64',
-              )
+              .toString('base64')
 
           proxy.on(
             'proxyReq',
@@ -71,6 +69,24 @@ export default defineConfig({
               request.setHeader(
                 'Authorization',
                 `Basic ${credentials}`,
+              )
+            },
+          )
+        },
+      },
+
+      '/console': {
+        target: 'https://127.0.0.1:8443',
+        secure: false,
+        changeOrigin: false,
+
+        configure(proxy) {
+          proxy.on(
+            'proxyReq',
+            (request) => {
+              request.setHeader(
+                'Host',
+                'api.heymail.test:8443',
               )
             },
           )

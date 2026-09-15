@@ -8,6 +8,7 @@ import {
   Menu,
   Send,
   Settings,
+  UserRound,
   UserRoundCheck,
   Webhook,
 } from 'lucide-react'
@@ -19,6 +20,7 @@ import {
   useQuery,
 } from '@tanstack/react-query'
 import {
+  Link,
   NavLink,
   Outlet,
   useLocation,
@@ -28,25 +30,23 @@ import {
   apiGet,
 } from '../../lib/api/client'
 import type {
+  ConsoleSessionResponse,
   DashboardResponse,
 } from '../../lib/api/types'
 
 const groups = [
   {
-    label: 'Overview',
-
+    label: 'Vue d’ensemble',
     items: [
       {
         to: '/',
-        label: 'Dashboard',
+        label: 'Tableau de bord',
         icon: LayoutDashboard,
       },
     ],
   },
-
   {
-    label: 'Transactional',
-
+    label: 'Envois',
     items: [
       {
         to: '/messages',
@@ -55,24 +55,22 @@ const groups = [
       },
       {
         to: '/send',
-        label: 'Send API',
+        label: 'Envoyer un email',
         icon: Send,
       },
     ],
   },
-
   {
     label: 'Configuration',
-
     items: [
       {
         to: '/domains',
-        label: 'Domains',
+        label: 'Domaines',
         icon: Globe2,
       },
       {
         to: '/senders',
-        label: 'Sender identities',
+        label: 'Expéditeurs',
         icon: UserRoundCheck,
       },
       {
@@ -82,14 +80,12 @@ const groups = [
       },
     ],
   },
-
   {
-    label: 'Developer',
-
+    label: 'Développeur',
     items: [
       {
         to: '/credentials',
-        label: 'API credentials',
+        label: 'Clés API',
         icon: Code2,
       },
       {
@@ -107,30 +103,34 @@ export function AppShell() {
     setMobileNavigationOpen,
   ] = useState(false)
 
-  const location =
-    useLocation()
+  const location = useLocation()
 
-  const apiStatus =
-    useQuery({
-      queryKey: [
-        'dashboard',
-      ],
+  const apiStatus = useQuery({
+    queryKey: [
+      'dashboard',
+    ],
+    queryFn: () =>
+      apiGet<DashboardResponse>(
+        '/api/v1/dashboard',
+      ),
+    refetchInterval: 30_000,
+    retry: false,
+  })
 
-      queryFn: () =>
-        apiGet<DashboardResponse>(
-          '/api/v1/dashboard',
-        ),
-
-      refetchInterval: 30_000,
-      retry: false,
-    })
+  const session = useQuery({
+    queryKey: [
+      'console-session',
+    ],
+    queryFn: () =>
+      apiGet<ConsoleSessionResponse>(
+        '/console/auth/session',
+      ),
+    retry: false,
+  })
 
   useEffect(
     () => {
-      setMobileNavigationOpen(
-        false,
-      )
-
+      setMobileNavigationOpen(false)
       window.scrollTo({
         top: 0,
         behavior: 'auto',
@@ -143,10 +143,15 @@ export function AppShell() {
 
   const apiLabel =
     apiStatus.isPending
-      ? 'Connecting…'
+      ? 'Connexion…'
       : apiStatus.isError
-        ? 'API unavailable'
-        : 'API connected'
+        ? 'API indisponible'
+        : 'API connectée'
+
+  const displayName =
+    session.data
+      ? `${session.data.user.firstName} ${session.data.user.lastName}`
+      : 'Compte HeyMail'
 
   return (
     <div className="app-shell">
@@ -168,7 +173,7 @@ export function AppShell() {
 
           <div>
             <strong>HeyMail</strong>
-            <span>Transactional email</span>
+            <span>Email platform</span>
           </div>
         </div>
 
@@ -182,43 +187,47 @@ export function AppShell() {
                 {group.label}
               </span>
 
-              {group.items.map(
-                ({
-                  to,
-                  label,
-                  icon: Icon,
-                }) => (
-                  <NavLink
-                    className={({
-                      isActive,
-                    }) =>
-                      isActive
-                        ? 'nav-item nav-item--active'
-                        : 'nav-item'
-                    }
-                    end={to === '/'}
-                    key={to}
-                    onClick={() =>
-                      setMobileNavigationOpen(
-                        false,
-                      )
-                    }
-                    to={to}
-                  >
-                    <Icon size={18} />
-                    <span>{label}</span>
-                  </NavLink>
-                ),
-              )}
+              {group.items.map(({
+                to,
+                label,
+                icon: Icon,
+              }) => (
+                <NavLink
+                  className={({ isActive }) =>
+                    isActive
+                      ? 'nav-item nav-item--active'
+                      : 'nav-item'
+                  }
+                  end={to === '/'}
+                  key={to}
+                  onClick={() =>
+                    setMobileNavigationOpen(false)
+                  }
+                  to={to}
+                >
+                  <Icon size={18} />
+                  <span>{label}</span>
+                </NavLink>
+              ))}
             </section>
           ))}
         </nav>
 
         <div className="sidebar__footer">
           <NavLink
-            className={({
-              isActive,
-            }) =>
+            className={({ isActive }) =>
+              isActive
+                ? 'nav-item nav-item--active'
+                : 'nav-item'
+            }
+            to="/profile"
+          >
+            <UserRound size={18} />
+            <span>Profil</span>
+          </NavLink>
+
+          <NavLink
+            className={({ isActive }) =>
               isActive
                 ? 'nav-item nav-item--active'
                 : 'nav-item'
@@ -226,19 +235,17 @@ export function AppShell() {
             to="/settings"
           >
             <Settings size={18} />
-            <span>Settings</span>
+            <span>Paramètres</span>
           </NavLink>
         </div>
       </aside>
 
       {mobileNavigationOpen && (
         <button
-          aria-label="Close navigation"
+          aria-label="Fermer la navigation"
           className="sidebar-overlay"
           onClick={() =>
-            setMobileNavigationOpen(
-              false,
-            )
+            setMobileNavigationOpen(false)
           }
           type="button"
         />
@@ -247,12 +254,10 @@ export function AppShell() {
       <main className="app-main">
         <header className="topbar">
           <button
-            aria-label="Open navigation"
+            aria-label="Ouvrir la navigation"
             className="topbar__menu"
             onClick={() =>
-              setMobileNavigationOpen(
-                true,
-              )
+              setMobileNavigationOpen(true)
             }
             type="button"
           >
@@ -268,30 +273,22 @@ export function AppShell() {
             }
           >
             <Activity size={16} />
-
-            <span>
-              {apiLabel}
-            </span>
+            <span>{apiLabel}</span>
           </div>
 
-          <div className="topbar__account">
-            <div className="account-avatar account-avatar--logo">
-              <img
-                alt=""
-                aria-hidden="true"
-                src="/heymail-logo.svg"
-              />
+          <Link
+            className="topbar__account"
+            to="/profile"
+          >
+            <div className="account-avatar">
+              <UserRound size={15} />
             </div>
 
             <div className="account-copy">
-              <strong>
-                HeyMail
-              </strong>
-              <span>
-                Local console
-              </span>
+              <strong>{displayName}</strong>
+              <span>Profil</span>
             </div>
-          </div>
+          </Link>
         </header>
 
         <div className="app-content">

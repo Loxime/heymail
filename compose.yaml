@@ -145,6 +145,7 @@ services:
       APP_SECRET_FILE: /run/secrets/app_secret
       MAILER_DSN: "null://null"
       HEYMAIL_BOUNCE_DOMAIN: "heymail.test"
+      HEYMAIL_SEND_QUOTA_PER_HOUR: "600"
       PAYLOAD_KEK_FILE: /run/secrets/payload_kek_v1
       WEBHOOK_KEK_FILE: /run/secrets/webhook_kek_v1
       HEYMAIL_API_KEY_FILE: /run/secrets/api_key

@@ -12,6 +12,8 @@ import {
   useQueryClient,
 } from '@tanstack/react-query'
 import {
+  useEffect,
+  useMemo,
   useState,
 } from 'react'
 
@@ -22,55 +24,85 @@ import {
 import type {
   SenderIdentityCreateResponse,
   SenderIdentityListResponse,
+  SendingDomainListResponse,
 } from '../../lib/api/types'
 import {
   formatDateTime,
 } from '../../lib/format/date'
 
 export function SendersPage() {
-  const queryClient =
-    useQueryClient()
+  const queryClient = useQueryClient()
 
-  const [
-    email,
-    setEmail,
-  ] = useState('')
+  const [localPart, setLocalPart] = useState('')
+  const [domain, setDomain] = useState('')
 
-  const senders =
-    useQuery({
-      queryKey: [
-        'senders',
-      ],
+  const senders = useQuery({
+    queryKey: ['senders'],
+    queryFn: () =>
+      apiGet<SenderIdentityListResponse>(
+        '/api/v1/senders',
+      ),
+  })
 
-      queryFn: () =>
-        apiGet<SenderIdentityListResponse>(
-          '/api/v1/senders',
-        ),
-    })
+  const domains = useQuery({
+    queryKey: ['domains'],
+    queryFn: () =>
+      apiGet<SendingDomainListResponse>(
+        '/api/v1/domains',
+      ),
+  })
 
-  const createSender =
-    useMutation({
-      mutationFn: (
-        value: string,
-      ) =>
-        apiPost<SenderIdentityCreateResponse>(
-          '/api/v1/senders',
-          {
-            email: value,
-          },
-        ),
+  const readyDomains = useMemo(
+    () =>
+      domains.data?.items.filter(
+        (item) =>
+          item.status === 'verified'
+          && item.dkim.ready,
+      ) ?? [],
+    [domains.data],
+  )
 
-      onSuccess: async () => {
-        setEmail('')
+  useEffect(
+    () => {
+      if (
+        domain === ''
+        && readyDomains.length > 0
+      ) {
+        const preferred =
+          readyDomains.find(
+            (item) =>
+              item.domain
+              === 'heymail.falchero.fr',
+          )
+          ?? readyDomains[0]
 
-        await queryClient
-          .invalidateQueries({
-            queryKey: [
-              'senders',
-            ],
-          })
-      },
-    })
+        setDomain(preferred.domain)
+      }
+    },
+    [domain, readyDomains],
+  )
+
+  const senderEmail =
+    localPart.trim() !== ''
+    && domain !== ''
+      ? `${localPart.trim()}@${domain}`
+      : ''
+
+  const createSender = useMutation({
+    mutationFn: () =>
+      apiPost<SenderIdentityCreateResponse>(
+        '/api/v1/senders',
+        {
+          email: senderEmail,
+        },
+      ),
+    onSuccess: async () => {
+      setLocalPart('')
+      await queryClient.invalidateQueries({
+        queryKey: ['senders'],
+      })
+    },
+  })
 
   return (
     <div className="page">
@@ -80,26 +112,24 @@ export function SendersPage() {
             Configuration
           </span>
 
-          <h1>
-            Sender identities
-          </h1>
+          <h1>Expéditeurs</h1>
 
           <p>
-            Authorize exact From
-            addresses on verified,
-            DKIM-ready domains.
+            Créez des adresses From sur vos
+            domaines vérifiés et prêts DKIM.
           </p>
         </div>
 
         <button
           className="button button--secondary"
-          onClick={() =>
+          onClick={() => {
             senders.refetch()
-          }
+            domains.refetch()
+          }}
           type="button"
         >
           <RefreshCw size={14} />
-          Refresh
+          Actualiser
         </button>
       </header>
 
@@ -111,71 +141,95 @@ export function SendersPage() {
 
           <div>
             <strong>
-              Add sender identity
+              Ajouter une adresse expéditeur
             </strong>
 
             <p>
-              Its domain must be verified
-              and DKIM-ready first.
+              Saisissez seulement la partie avant
+              @ puis choisissez un domaine prêt.
             </p>
           </div>
         </div>
 
         <form
-          className="create-resource__form"
+          className="create-resource__form sender-address-builder"
           onSubmit={(event) => {
             event.preventDefault()
 
-            const value =
-              email.trim()
-
-            if (value === '') {
-              return
+            if (senderEmail !== '') {
+              createSender.mutate()
             }
-
-            createSender.mutate(
-              value,
-            )
           }}
         >
-          <input
-            aria-label="Sender email"
-            autoComplete="email"
-            onChange={(event) =>
-              setEmail(
-                event.target.value,
-              )
-            }
-            placeholder="hello@example.com"
-            type="email"
-            value={email}
-          />
+          <div className="sender-address-builder__address">
+            <input
+              aria-label="Préfixe de l'adresse expéditeur"
+              autoComplete="off"
+              onChange={(event) =>
+                setLocalPart(
+                  event.target.value.replace('@', ''),
+                )
+              }
+              placeholder="support"
+              value={localPart}
+            />
+
+            <span>@</span>
+
+            <select
+              aria-label="Domaine expéditeur"
+              disabled={readyDomains.length === 0}
+              onChange={(event) =>
+                setDomain(event.target.value)
+              }
+              value={domain}
+            >
+              {readyDomains.length === 0 && (
+                <option value="">
+                  Aucun domaine prêt
+                </option>
+              )}
+
+              {readyDomains.map((item) => (
+                <option
+                  key={item.id}
+                  value={item.domain}
+                >
+                  {item.domain}
+                </option>
+              ))}
+            </select>
+          </div>
 
           <button
             className="button button--primary button--inline"
             disabled={
               createSender.isPending
-              || email.trim() === ''
+              || senderEmail === ''
             }
             type="submit"
           >
             <Plus size={14} />
-            Add sender
+            Ajouter
           </button>
         </form>
       </section>
 
-      {createSender.error
-        instanceof Error && (
-          <div className="inline-error">
-            {createSender.error.message}
-          </div>
-        )}
+      {senderEmail !== '' && (
+        <div className="sender-preview">
+          Adresse créée : <strong>{senderEmail}</strong>
+        </div>
+      )}
+
+      {createSender.error instanceof Error && (
+        <div className="inline-error">
+          {createSender.error.message}
+        </div>
+      )}
 
       {senders.isError && (
         <div className="inline-error">
-          {senders.error
-            instanceof Error
+          {senders.error instanceof Error
             ? senders.error.message
             : 'Unable to load senders.'}
         </div>
@@ -184,22 +238,16 @@ export function SendersPage() {
       <section className="panel">
         <header className="panel__header panel__header--row">
           <div>
-            <h2>
-              Authorized senders
-            </h2>
-
+            <h2>Expéditeurs autorisés</h2>
             <p>
-              Exact From identities
-              accepted by the send API.
+              Identités From acceptées par l'API.
             </p>
           </div>
         </header>
 
         {senders.isLoading && (
           <div className="message-table-skeleton">
-            {Array.from({
-              length: 5,
-            }).map((_, index) => (
+            {Array.from({ length: 5 }).map((_, index) => (
               <div
                 className="skeleton message-table-skeleton__row"
                 key={index}
@@ -208,93 +256,77 @@ export function SendersPage() {
           </div>
         )}
 
-        {senders.data?.items.length
-          === 0 && (
-            <div className="empty-state">
-              <div className="empty-state__icon">
-                <Mail size={22} />
-              </div>
-
-              <strong>
-                No sender identities
-              </strong>
-
-              <span>
-                Verify a DKIM-ready
-                domain, then register an
-                exact From address.
-              </span>
+        {senders.data?.items.length === 0 && (
+          <div className="empty-state">
+            <div className="empty-state__icon">
+              <Mail size={22} />
             </div>
-          )}
+
+            <strong>Aucun expéditeur</strong>
+            <span>
+              Vérifiez un domaine puis créez votre
+              première adresse expéditeur.
+            </span>
+          </div>
+        )}
 
         {senders.data
-          && senders.data.items.length
-            > 0 && (
-            <div className="table-scroll">
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    <th>Sender</th>
-                    <th>Domain</th>
-                    <th>Authorization</th>
-                    <th>Created</th>
-                  </tr>
-                </thead>
+          && senders.data.items.length > 0 && (
+          <div className="table-scroll">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Expéditeur</th>
+                  <th>Domaine</th>
+                  <th>Autorisation</th>
+                  <th>Créé</th>
+                </tr>
+              </thead>
 
-                <tbody>
-                  {senders.data.items.map(
-                    (sender) => (
-                      <tr
-                        key={sender.id}
-                      >
-                        <td>
-                          <div className="sender-cell">
-                            <div className="sender-avatar">
-                              {
-                                sender.email
-                                  .charAt(0)
-                                  .toUpperCase()
-                              }
-                            </div>
+              <tbody>
+                {senders.data.items.map((sender) => (
+                  <tr key={sender.id}>
+                    <td>
+                      <div className="sender-cell">
+                        <div className="sender-avatar">
+                          {sender.email
+                            .charAt(0)
+                            .toUpperCase()}
+                        </div>
 
-                            <strong>
-                              {sender.email}
-                            </strong>
-                          </div>
-                        </td>
+                        <strong>{sender.email}</strong>
+                      </div>
+                    </td>
 
-                        <td className="table-muted">
-                          {sender.domain}
-                        </td>
+                    <td className="table-muted">
+                      {sender.domain}
+                    </td>
 
-                        <td>
-                          {sender.authorized
-                            ? (
-                                <span className="authorization authorization--ready">
-                                  <CheckCircle2 size={13} />
-                                  Authorized
-                                </span>
-                              )
-                            : (
-                                <span className="authorization authorization--blocked">
-                                  <ShieldAlert size={13} />
-                                  Blocked
-                                </span>
-                              )}
-                        </td>
-
-                        <td className="table-muted">
-                          {formatDateTime(
-                            sender.createdAt,
+                    <td>
+                      {sender.authorized
+                        ? (
+                            <span className="authorization authorization--ready">
+                              <CheckCircle2 size={13} />
+                              Autorisé
+                            </span>
+                          )
+                        : (
+                            <span className="authorization authorization--blocked">
+                              <ShieldAlert size={13} />
+                              Bloqué
+                            </span>
                           )}
-                        </td>
-                      </tr>
-                    ),
-                  )}
-                </tbody>
-              </table>
-            </div>
-          )}
+                    </td>
+
+                    <td className="table-muted">
+                      {formatDateTime(sender.createdAt)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </section>
     </div>
   )

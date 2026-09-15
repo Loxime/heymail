@@ -9,11 +9,17 @@ import {
   DashboardPage,
 } from '../features/dashboard/DashboardPage'
 import {
+  LoginPage,
+} from '../features/auth/LoginPage'
+import {
   MessageDetailPage,
 } from '../features/messages/MessageDetailPage'
 import {
   MessagesPage,
 } from '../features/messages/MessagesPage'
+import {
+  ProfilePage,
+} from '../features/profile/ProfilePage'
 import {
   SendApiPage,
 } from '../features/send/SendApiPage'
@@ -42,60 +48,57 @@ import {
 export const router =
   createBrowserRouter([
     {
+      path: '/login',
+      element: <LoginPage />,
+    },
+    {
       path: '/',
       element: <AppShell />,
-
       children: [
         {
           index: true,
           element: <DashboardPage />,
         },
-
         {
           path: 'messages',
           element: <MessagesPage />,
         },
-
         {
           path: 'messages/:id',
           element: <MessageDetailPage />,
         },
-
         {
           path: 'send',
           element: <SendApiPage />,
         },
-
         {
           path: 'domains',
           element: <DomainsPage />,
         },
-
         {
           path: 'senders',
           element: <SendersPage />,
         },
-
         {
           path: 'webhooks',
           element: <WebhooksPage />,
         },
-
         {
           path: 'credentials',
           element: <CredentialsPage />,
         },
-
         {
           path: 'docs',
           element: <DocumentationPage />,
         },
-
+        {
+          path: 'profile',
+          element: <ProfilePage />,
+        },
         {
           path: 'settings',
           element: <SettingsPage />,
         },
-
         {
           path: '*',
           element: <NotFoundPage />,

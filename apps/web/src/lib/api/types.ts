@@ -183,3 +183,32 @@ export interface SendMessageResponse {
   replayed: boolean
 }
 
+
+export interface ConsoleUser {
+  id: number
+  email: string
+  firstName: string
+  lastName: string
+}
+
+export interface ConsoleSessionResponse {
+  user: ConsoleUser
+}
+
+export interface ConsoleFavoriteContact {
+  id: number
+  email: string
+  name: string | null
+  createdAt: string
+}
+
+export interface ConsoleProfileResponse {
+  user: ConsoleUser
+  stats: {
+    messagesSent: number
+    messagesReceived: number
+    messagesReceivedAvailable: boolean
+    favoriteContacts: number
+  }
+  favorites: ConsoleFavoriteContact[]
+}

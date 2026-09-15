@@ -16,8 +16,7 @@ async function parseError(
   let message =
     `HeyMail API returned HTTP ${response.status}.`
 
-  let code: string | null =
-    null
+  let code: string | null = null
 
   try {
     const payload =
@@ -32,16 +31,14 @@ async function parseError(
       typeof payload.error?.code
       === 'string'
     ) {
-      code =
-        payload.error.code
+      code = payload.error.code
     }
 
     if (
       typeof payload.error?.message
       === 'string'
     ) {
-      message =
-        payload.error.message
+      message = payload.error.message
     }
   } catch {
     // Keep generic bounded error.
@@ -58,28 +55,41 @@ async function request<T>(
   path: string,
   init: RequestInit,
 ): Promise<T> {
-  const response =
-    await fetch(
-      path,
-      {
-        credentials: 'same-origin',
-
-        ...init,
-
-        headers: {
-          Accept: 'application/json',
-          ...init.headers,
-        },
+  const response = await fetch(
+    path,
+    {
+      credentials: 'same-origin',
+      ...init,
+      headers: {
+        Accept: 'application/json',
+        ...init.headers,
       },
-    )
+    },
+  )
 
   if (!response.ok) {
-    throw await parseError(
-      response,
-    )
+    throw await parseError(response)
+  }
+
+  if (response.status === 204) {
+    return undefined as T
   }
 
   return await response.json() as T
+}
+
+function jsonBody(
+  body: unknown,
+): {
+  headers: Record<string, string>
+  body: string
+} {
+  return {
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  }
 }
 
 export function apiGet<T>(
@@ -98,27 +108,55 @@ export function apiPost<T>(
   body?: unknown,
   headers: Record<string, string> = {},
 ): Promise<T> {
+  const encoded =
+    body === undefined
+      ? null
+      : jsonBody(body)
+
   return request<T>(
     path,
     {
       method: 'POST',
-
       headers: {
-        ...(body === undefined
-          ? {}
-          : {
-              'Content-Type':
-                'application/json',
-            }),
+        ...(encoded?.headers ?? {}),
         ...headers,
       },
+      body: encoded?.body,
+    },
+  )
+}
 
-      body:
-        body === undefined
-          ? undefined
-          : JSON.stringify(
-              body,
-            ),
+export function apiPatch<T>(
+  path: string,
+  body: unknown,
+): Promise<T> {
+  const encoded = jsonBody(body)
+
+  return request<T>(
+    path,
+    {
+      method: 'PATCH',
+      headers: encoded.headers,
+      body: encoded.body,
+    },
+  )
+}
+
+export function apiDelete<T>(
+  path: string,
+  body?: unknown,
+): Promise<T> {
+  const encoded =
+    body === undefined
+      ? null
+      : jsonBody(body)
+
+  return request<T>(
+    path,
+    {
+      method: 'DELETE',
+      headers: encoded?.headers,
+      body: encoded?.body,
     },
   )
 }

@@ -1,0 +1,16 @@
+{
+  "name": "loxime/heymail-php",
+  "description": "Small PHP client for the HeyMail transactional email API",
+  "type": "library",
+  "license": "proprietary",
+  "require": {
+    "php": "^8.2",
+    "ext-curl": "*",
+    "ext-json": "*"
+  },
+  "autoload": {
+    "psr-4": {
+      "HeyMail\\": "src/"
+    }
+  }
+}

@@ -1,0 +1,24 @@
+name: heymail-capture
+
+services:
+  capture:
+    image: axllent/mailpit:latest
+    restart: unless-stopped
+
+    environment:
+      MP_MAX_MESSAGES: "5000"
+      MP_DATABASE: /data/mailpit.db
+
+    ports:
+      - "${HEYMAIL_CAPTURE_BIND:-127.0.0.1}:${HEYMAIL_CAPTURE_SMTP_PORT:-1025}:1025"
+      - "${HEYMAIL_CAPTURE_BIND:-127.0.0.1}:${HEYMAIL_CAPTURE_UI_PORT:-8025}:8025"
+
+    volumes:
+      - capture_data:/data
+
+    security_opt:
+      - no-new-privileges:true
+
+volumes:
+  capture_data:
+    name: heymail_capture_data
