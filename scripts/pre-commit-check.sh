@@ -116,18 +116,25 @@ if [[ "$GIT_INITIALIZED" == true ]]; then
             FAILED=1
         fi
 
-        if git grep --cached -n -I \
-            -E -- '-----BEGIN ([A-Z0-9 ]+ )?PRIVATE KEY-----' \
-            >/tmp/heymail-private-key-check 2>/dev/null; then
+        STAGED_PRIVATE_KEY_HEADERS="$(
+            git diff \
+                --cached \
+                --no-color \
+                --unified=0 \
+                --diff-filter=ACMR \
+                -- \
+                | grep -E \
+                    '^\+[[:space:]]*-----BEGIN ([A-Z0-9 ]+ )?PRIVATE KEY-----[[:space:]]*$' \
+                || true
+        )"
 
-            echo "ERROR: private key material appears to be staged:"
-            cat /tmp/heymail-private-key-check
+        if [[ -n "$STAGED_PRIVATE_KEY_HEADERS" ]]; then
+            echo "ERROR: private key material appears in staged additions:"
+            printf '%s\n' "$STAGED_PRIVATE_KEY_HEADERS"
             FAILED=1
         else
-            echo "OK: no private-key header detected in staged content."
+            echo "OK: no private-key header detected in staged additions."
         fi
-
-        rm -f /tmp/heymail-private-key-check
     else
         echo "INFO: no files are currently staged."
     fi
