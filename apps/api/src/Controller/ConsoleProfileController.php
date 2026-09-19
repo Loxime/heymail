@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Controller;
 
 use App\Console\ConsoleAuthentication;
+use App\Console\ConsoleUserProvisioner;
 use DateTimeImmutable;
 use DateTimeZone;
 use Doctrine\DBAL\Connection;
@@ -23,6 +24,7 @@ final readonly class ConsoleProfileController
     public function __construct(
         private ConsoleAuthentication $authentication,
         private Connection $connection,
+        private ConsoleUserProvisioner $provisioner,
     ) {
     }
 
@@ -553,12 +555,9 @@ SQL,
             );
         }
 
-        $this->connection
+        $this->provisioner
             ->delete(
-                'console_user',
-                [
-                    'id' => $user['id'],
-                ],
+                $user['id'],
             );
 
         $response = new Response(

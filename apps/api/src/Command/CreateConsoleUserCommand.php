@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Command;
 
 use App\Console\ConsoleAuthentication;
+use App\Console\ConsoleUserProvisioner;
 use DateTimeImmutable;
 use DateTimeZone;
 use Doctrine\DBAL\Connection;
@@ -24,6 +25,7 @@ final class CreateConsoleUserCommand extends Command
 {
     public function __construct(
         private readonly Connection $connection,
+        private readonly ConsoleUserProvisioner $provisioner,
     ) {
         parent::__construct();
     }
@@ -152,18 +154,21 @@ final class CreateConsoleUserCommand extends Command
             new DateTimeZone('UTC'),
         );
 
-        $this->connection
-            ->insert(
-                'console_user',
-                [
-                    'email' => $email,
-                    'first_name' => $firstName,
-                    'last_name' => $lastName,
-                    'password_hash' => $hash,
-                    'created_at' => $now->format('Y-m-d H:i:s'),
-                    'updated_at' => $now->format('Y-m-d H:i:s'),
-                ],
+        try {
+            $this->provisioner->create(
+                email: $email,
+                firstName: $firstName,
+                lastName: $lastName,
+                passwordHash: $hash,
+                now: $now,
             );
+        } catch (\Throwable) {
+            $io->error(
+                'Unable to create console user.',
+            );
+
+            return Command::FAILURE;
+        }
 
         $io->success(
             sprintf(
