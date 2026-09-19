@@ -906,6 +906,13 @@ $stmt = $pdo->prepare(
 SELECT event_type
 FROM outbound_message_event
 WHERE outbound_message_id = :id
+  AND event_type IN (
+      'queued',
+      'ready_for_submission',
+      'submitting',
+      'submission_uncertain',
+      'submitted'
+  )
 ORDER BY occurred_at ASC, id ASC
 SQL
 );

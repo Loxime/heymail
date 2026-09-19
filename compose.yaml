@@ -241,6 +241,7 @@ services:
       APP_SECRET_FILE: /run/secrets/app_secret
       MAILER_DSN: "smtp://postfix-mail:10025"
       HEYMAIL_BOUNCE_DOMAIN: "heymail.test"
+      HEYMAIL_BOUNCE_HMAC_KEY_FILE: /run/secrets/bounce_hmac_key
       PAYLOAD_KEK_FILE: /run/secrets/payload_kek_v1
 
       DB_HOST: database
@@ -253,6 +254,7 @@ services:
       - app_secret
       - postgres_app_password
       - payload_kek_v1
+      - bounce_hmac_key
 
     networks:
       - data_net
@@ -1421,6 +1423,9 @@ secrets:
 
   api_secret:
     file: ./secrets/api_secret
+
+  bounce_hmac_key:
+    file: ./secrets/bounce_hmac_key
 
   gateway_tls_cert:
     file: ./secrets/gateway_tls_cert.pem
