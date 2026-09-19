@@ -16,7 +16,9 @@ TMP_DIR="$(
 )"
 
 OUTBOUND_ID=""
+SENDER_EMAIL=""
 TRIGGER_INSTALLED="false"
+DELIVERY_OBSERVER_WAS_RUNNING="false"
 
 fail() {
     printf 'FAIL: %s\n' "$1" >&2
@@ -158,10 +160,28 @@ WHERE id = :'target_id';
 SQL
     fi
 
+    if [ -n "${SENDER_EMAIL:-}" ]
+    then
+        admin_psql \
+            -v sender_email="$SENDER_EMAIL" \
+            >/dev/null 2>&1 <<'SQL'
+DELETE FROM sender_identity
+WHERE email = :'sender_email';
+SQL
+    fi
+
     docker compose start \
         mail-worker \
         >/dev/null 2>&1 \
         || true
+
+    if [ "$DELIVERY_OBSERVER_WAS_RUNNING" = "true" ]
+    then
+        docker compose start \
+            delivery-observer \
+            >/dev/null 2>&1 \
+            || true
+    fi
 
     rm -rf "$TMP_DIR"
 
@@ -172,10 +192,22 @@ trap cleanup EXIT
 
 echo "=== HeyMail crash after Postfix acceptance ==="
 
+if docker compose ps \
+    --status running \
+    --services \
+    | grep -Fxq delivery-observer
+then
+    DELIVERY_OBSERVER_WAS_RUNNING="true"
+fi
+
+docker compose build \
+    gateway \
+    mail-worker \
+    >/dev/null
+
 docker compose up \
     -d \
     --wait \
-    --build \
     gateway \
     mail-worker \
     postfix \
@@ -185,7 +217,60 @@ docker compose up \
     fake-mx-permfail \
     >/dev/null
 
-pass "complete outbound laboratory is ready"
+pass "outbound laboratory containers are healthy"
+
+RSPAMD_READY="false"
+
+for attempt in $(seq 1 90)
+do
+    if docker compose logs \
+        --no-color \
+        rspamd \
+        2>/dev/null \
+        | grep -Fq \
+            "received multipattern loaded notification for 'tld'"
+    then
+        RSPAMD_READY="true"
+        break
+    fi
+
+    if ! docker compose ps \
+        --status running \
+        --services \
+        | grep -Fxq rspamd
+    then
+        fail "Rspamd stopped before TLD compilation completed"
+    fi
+
+    if [ $((attempt % 3)) -eq 0 ]
+    then
+        printf \
+            'INFO: waiting for Rspamd TLD readiness (%ds elapsed)\n' \
+            "$((attempt * 10))"
+    fi
+
+    sleep 10
+done
+
+[ "$RSPAMD_READY" = "true" ] \
+    || fail "Rspamd TLD compilation did not complete within 15 minutes"
+
+pass "Rspamd is fully settled before crash injection"
+
+docker compose stop \
+    delivery-observer \
+    >/dev/null 2>&1 \
+    || true
+
+if docker compose ps \
+    --status running \
+    --services \
+    | grep -Fxq delivery-observer
+then
+    fail "delivery observer is still running during crash test"
+fi
+
+pass "delivery observer is isolated from crash scenario"
 
 docker compose stop \
     mail-worker \
@@ -216,6 +301,47 @@ PY
 
 IDEMPOTENCY_KEY="postfix-crash-$TOKEN"
 MARKER="HEYMAIL-POSTFIX-CRASH-$TOKEN"
+SENDER_EMAIL="postfix-crash-$TOKEN@heymail.test"
+
+SENDER_DOMAIN_ID="$(
+    admin_psql \
+        -At \
+        -v legacy_name='HeyMail Legacy Workspace' <<'SQL'
+SELECT sd.id
+FROM sending_domain sd
+INNER JOIN workspace w
+    ON w.id = sd.workspace_id
+WHERE sd.domain = 'heymail.test'
+  AND sd.status = 'verified'
+  AND sd.dkim_selector IS NOT NULL
+  AND sd.dkim_public_key IS NOT NULL
+  AND sd.dkim_provisioned_at IS NOT NULL
+  AND w.name = :'legacy_name'
+ORDER BY sd.id
+LIMIT 1;
+SQL
+)"
+
+[[ "$SENDER_DOMAIN_ID" =~ ^[1-9][0-9]*$ ]] \
+    || fail "legacy heymail.test sending domain is not ready"
+
+admin_psql \
+    -v domain_id="$SENDER_DOMAIN_ID" \
+    -v sender_email="$SENDER_EMAIL" \
+    >/dev/null <<'SQL'
+INSERT INTO sender_identity (
+    sending_domain_id,
+    email,
+    created_at
+)
+VALUES (
+    :'domain_id',
+    :'sender_email',
+    timezone('UTC', CURRENT_TIMESTAMP)
+);
+SQL
+
+pass "exact legacy-workspace sender fixture is authorized"
 
 AUTH_CONFIG="$TMP_DIR/auth.conf"
 
@@ -238,18 +364,19 @@ unset AUTH_B64
 PAYLOAD="$TMP_DIR/payload.json"
 
 python3 \
-    - "$MARKER" \
+    - "$SENDER_EMAIL" "$MARKER" \
     > "$PAYLOAD" <<'PY'
 import json
 import sys
 
-marker = sys.argv[1]
+sender = sys.argv[1]
+marker = sys.argv[2]
 
 print(
     json.dumps(
         {
             "from": {
-                "email": "sender@heymail.test",
+                "email": sender,
                 "name": "HeyMail",
             },
             "to": [
