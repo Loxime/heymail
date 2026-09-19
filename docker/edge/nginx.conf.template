@@ -76,6 +76,8 @@ http {
     server {
         listen 8081;
 
+        absolute_redirect off;
+
         root /srv/heymail;
         index index.html;
 
