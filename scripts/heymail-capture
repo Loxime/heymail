@@ -1,0 +1,320 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+APP_NAME="heymail-capture"
+INSTALL_ROOT="${HEYMAIL_CAPTURE_HOME:-$HOME/.local/share/heymail-capture}"
+COMPOSE_FILE="$INSTALL_ROOT/compose.capture.yaml"
+HAPROXY_FILE="$INSTALL_ROOT/ops/capture/haproxy.cfg"
+NETWORK_NAME="heymail_capture_net"
+DEFAULT_UI="http://127.0.0.1:${HEYMAIL_CAPTURE_UI_PORT:-8025}"
+
+fail() {
+    printf 'heymail-capture: %s\n' "$1" >&2
+    exit 1
+}
+
+require_docker() {
+    command -v docker >/dev/null 2>&1 \
+        || fail "docker is required"
+
+    docker compose version >/dev/null 2>&1 \
+        || fail "docker compose v2 is required"
+}
+
+require_bundle() {
+    [ -f "$COMPOSE_FILE" ] \
+        || fail "capture bundle missing: $COMPOSE_FILE"
+
+    [ -f "$HAPROXY_FILE" ] \
+        || fail "capture bundle missing: $HAPROXY_FILE"
+}
+
+compose() {
+    docker compose \
+        -p heymail-capture \
+        -f "$COMPOSE_FILE" \
+        "$@"
+}
+
+port_free() {
+    local port="$1"
+
+    if command -v ss >/dev/null 2>&1; then
+        ! ss -lnt \
+            | awk '{print $4}' \
+            | grep -Eq "(^|:)${port}$"
+        return
+    fi
+
+    if command -v lsof >/dev/null 2>&1; then
+        ! lsof \
+            -nP \
+            -iTCP:"$port" \
+            -sTCP:LISTEN \
+            >/dev/null 2>&1
+        return
+    fi
+
+    return 0
+}
+
+capture_running() {
+    local cid
+
+    cid="$(
+        compose ps -q capture 2>/dev/null \
+            || true
+    )"
+
+    [ -n "$cid" ] \
+        && [ "$(
+            docker inspect \
+                --format '{{.State.Running}}' \
+                "$cid" \
+                2>/dev/null \
+                || true
+        )" = "true" ]
+}
+
+cmd_up() {
+    require_docker
+    require_bundle
+
+    local smtp_port="${HEYMAIL_CAPTURE_SMTP_PORT:-1025}"
+    local ui_port="${HEYMAIL_CAPTURE_UI_PORT:-8025}"
+
+    if ! capture_running; then
+        port_free "$smtp_port" \
+            || fail "SMTP port $smtp_port is already in use"
+
+        port_free "$ui_port" \
+            || fail "UI port $ui_port is already in use"
+    fi
+
+    compose up \
+        -d \
+        --wait \
+        capture \
+        ingress
+
+    printf 'SMTP(host): smtp://127.0.0.1:%s\n' "$smtp_port"
+    printf 'SMTP(docker): smtp://capture:1025\n'
+    printf 'UI: http://127.0.0.1:%s\n' "$ui_port"
+}
+
+cmd_down() {
+    require_docker
+    require_bundle
+
+    compose down \
+        --remove-orphans
+}
+
+cmd_status() {
+    require_docker
+    require_bundle
+
+    compose ps
+
+    printf '\nSMTP(host): smtp://127.0.0.1:%s\n' \
+        "${HEYMAIL_CAPTURE_SMTP_PORT:-1025}"
+    printf 'SMTP(docker): smtp://capture:1025\n'
+    printf 'UI: http://127.0.0.1:%s\n' \
+        "${HEYMAIL_CAPTURE_UI_PORT:-8025}"
+}
+
+cmd_logs() {
+    require_docker
+    require_bundle
+
+    compose logs \
+        --tail="${HEYMAIL_CAPTURE_LOG_TAIL:-200}" \
+        "$@"
+}
+
+cmd_open() {
+    require_docker
+    require_bundle
+
+    local url="$DEFAULT_UI"
+
+    if command -v xdg-open >/dev/null 2>&1; then
+        xdg-open "$url" >/dev/null 2>&1 &
+        printf '%s\n' "$url"
+        return
+    fi
+
+    if command -v open >/dev/null 2>&1; then
+        open "$url" >/dev/null 2>&1 &
+        printf '%s\n' "$url"
+        return
+    fi
+
+    printf '%s\n' "$url"
+}
+
+find_compose_file() {
+    local candidate
+
+    for candidate in \
+        compose.yaml \
+        compose.yml \
+        docker-compose.yaml \
+        docker-compose.yml
+    do
+        if [ -f "$candidate" ]; then
+            printf '%s\n' "$candidate"
+            return
+        fi
+    done
+
+    fail "no Compose file found in $(pwd)"
+}
+
+compose_services() {
+    local compose_file="$1"
+
+    docker compose \
+        -f "$compose_file" \
+        config \
+        --services
+}
+
+cmd_inject() {
+    require_docker
+    require_bundle
+
+    local service="${1:-}"
+    local compose_file
+    local output_file="compose.heymail-capture.yaml"
+
+    compose_file="$(
+        find_compose_file
+    )"
+
+    if [ -z "$service" ]; then
+        local services
+        services="$(
+            compose_services "$compose_file"
+        )"
+
+        if [ "$(
+            printf '%s\n' "$services" \
+                | sed '/^[[:space:]]*$/d' \
+                | wc -l
+        )" -eq 1 ]; then
+            service="$(
+                printf '%s\n' "$services" \
+                    | sed '/^[[:space:]]*$/d'
+            )"
+        else
+            printf 'Available services:\n%s\n' "$services" >&2
+            fail "specify the application service: heymail-capture inject <service>"
+        fi
+    fi
+
+    compose_services "$compose_file" \
+        | grep -Fxq "$service" \
+        || fail "unknown Compose service: $service"
+
+    if [ -e "$output_file" ]; then
+        grep -Fq '# generated-by: heymail-capture' "$output_file" \
+            || fail "$output_file exists and is not managed by heymail-capture"
+    fi
+
+    cat > "$output_file" <<EOF
+# generated-by: heymail-capture
+# Reversible with: heymail-capture eject
+services:
+  ${service}:
+    environment:
+      MAILER_DSN: "smtp://capture:1025"
+    networks:
+      - heymail_capture_net
+
+networks:
+  heymail_capture_net:
+    external: true
+    name: ${NETWORK_NAME}
+EOF
+
+    printf 'Generated %s for service %s.\n' \
+        "$output_file" \
+        "$service"
+
+    printf 'Start capture: heymail-capture up\n'
+    printf 'Run project: docker compose -f %s -f %s up -d\n' \
+        "$compose_file" \
+        "$output_file"
+    printf 'Remove override: heymail-capture eject\n'
+}
+
+cmd_eject() {
+    local output_file="compose.heymail-capture.yaml"
+
+    if [ ! -e "$output_file" ]; then
+        printf '%s does not exist.\n' "$output_file"
+        return
+    fi
+
+    grep -Fq '# generated-by: heymail-capture' "$output_file" \
+        || fail "$output_file exists and is not managed by heymail-capture"
+
+    rm -f "$output_file"
+
+    printf 'Removed %s.\n' "$output_file"
+}
+
+usage() {
+    cat <<'EOF'
+Usage:
+  heymail-capture up
+  heymail-capture status
+  heymail-capture open
+  heymail-capture logs [capture|ingress]
+  heymail-capture down
+  heymail-capture inject [compose-service]
+  heymail-capture eject
+
+Host application:
+  MAILER_DSN=smtp://127.0.0.1:1025
+
+Docker Compose application:
+  heymail-capture inject <service>
+  docker compose -f compose.yaml -f compose.heymail-capture.yaml up -d
+EOF
+}
+
+command="${1:-help}"
+shift || true
+
+case "$command" in
+    up)
+        cmd_up "$@"
+        ;;
+    down)
+        cmd_down "$@"
+        ;;
+    status)
+        cmd_status "$@"
+        ;;
+    logs)
+        cmd_logs "$@"
+        ;;
+    open)
+        cmd_open "$@"
+        ;;
+    inject)
+        cmd_inject "$@"
+        ;;
+    eject)
+        cmd_eject "$@"
+        ;;
+    help|-h|--help)
+        usage
+        ;;
+    *)
+        usage >&2
+        fail "unknown command: $command"
+        ;;
+esac

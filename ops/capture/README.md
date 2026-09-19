@@ -1,12 +1,80 @@
 # HeyMail Capture
 
-Local/staging inbox for application development. It deliberately does not use
-the production HeyMail SMTP delivery path.
+Local inbox for application development. It deliberately does not use the
+production HeyMail SMTP delivery path and Mailpit has no normal Internet egress.
 
-## Start
+## Universal CLI
 
-Use a dedicated Compose project so the capture sandbox stays separate from the
-main HeyMail development stack:
+Install once from a HeyMail checkout:
+
+```bash
+./scripts/install-heymail-capture.sh
+```
+
+The default installation is:
+
+- binary: `~/.local/bin/heymail-capture`
+- bundle: `~/.local/share/heymail-capture`
+
+Make sure `~/.local/bin` is in `PATH`.
+
+Commands:
+
+```bash
+heymail-capture up
+heymail-capture status
+heymail-capture open
+heymail-capture logs
+heymail-capture down
+```
+
+Default endpoints:
+
+- host SMTP: `smtp://127.0.0.1:1025`
+- Docker SMTP: `smtp://capture:1025`
+- inbox UI: `http://127.0.0.1:8025`
+
+A host application can use:
+
+```dotenv
+MAILER_DSN=smtp://127.0.0.1:1025
+```
+
+## Inject into any Docker Compose project
+
+From another project's root:
+
+```bash
+heymail-capture up
+heymail-capture inject app
+docker compose \
+  -f compose.yaml \
+  -f compose.heymail-capture.yaml \
+  up -d
+```
+
+Replace `app` with the service that sends mail.
+
+`inject` does not edit the project's existing Compose file or application
+configuration. It creates only `compose.heymail-capture.yaml`, marked as managed
+by HeyMail Capture. The override:
+
+- sets `MAILER_DSN=smtp://capture:1025` on the selected service;
+- attaches that service to the external `heymail_capture_net`;
+- leaves every other service untouched.
+
+Reverse it with:
+
+```bash
+heymail-capture eject
+```
+
+`eject` refuses to remove a file that does not carry the HeyMail Capture
+ownership marker.
+
+## Direct Compose usage
+
+The repository-local sandbox can still be started without installing the CLI:
 
 ```bash
 docker compose \
@@ -15,25 +83,12 @@ docker compose \
   up -d
 ```
 
-Default endpoints:
-
-- SMTP: `127.0.0.1:1025`
-- Inbox UI: `http://127.0.0.1:8025`
-
-Symfony example:
-
-```dotenv
-MAILER_DSN=smtp://127.0.0.1:1025
-```
-
 ## Network model
 
 Mailpit itself is attached **only** to `heymail_capture_net`, which is a Docker
 `internal: true` network. It therefore has no normal external route.
 
-Because an internal Docker network is intentionally isolated from host network
-interfaces, a small HAProxy ingress sidecar exposes only two fixed inbound
-destinations:
+A small HAProxy ingress sidecar exposes only two fixed inbound destinations:
 
 - host `127.0.0.1:1025` -> `capture:1025`
 - host `127.0.0.1:8025` -> `capture:8025`
@@ -41,12 +96,8 @@ destinations:
 The ingress sidecar has no dynamic forward-proxy configuration and cannot be
 used by Mailpit as an arbitrary SMTP/HTTP egress proxy.
 
-If another application runs in Docker and should send directly to Mailpit,
-attach that application to the external network `heymail_capture_net` and use:
-
-```dotenv
-MAILER_DSN=smtp://capture:1025
-```
+Docker applications explicitly injected by the CLI join the external network
+`heymail_capture_net` and address Mailpit directly as `capture:1025`.
 
 ## Security properties
 
@@ -54,7 +105,8 @@ MAILER_DSN=smtp://capture:1025
 - HAProxy is version-pinned and OCI-digest-pinned.
 - Mailpit's automatic version check is disabled.
 - Mailpit is attached only to an `internal: true` network.
-- Host SMTP/UI bindings are loopback-only.
+- Host SMTP/UI bindings are loopback-only by default.
+- The CLI checks default host port availability before first startup.
 - Mailpit's root filesystem is read-only.
 - Mailpit's only writable filesystem is `/tmp`, backed by tmpfs.
 - Linux capabilities are dropped from both containers.
@@ -62,9 +114,13 @@ MAILER_DSN=smtp://capture:1025
 - Mailpit's local Host allowlist is enabled.
 - Captured mail is ephemeral and disappears when the capture container is
   recreated.
+- Project injection is explicit and reversible; existing project files are not
+  silently modified.
 
-The integration gate proves that a container attached only to the Mailpit
-internal network cannot open a TCP connection to a public Internet address.
+`tests/integration/capture-mode.sh` proves the underlying sandbox has no TCP
+Internet egress. `tests/integration/capture-cli.sh` proves install, startup,
+project injection, external-network attachment and reversal with a disposable
+Compose project.
 
 For staging, keep SMTP private. Put any staging inbox UI behind the staging
 reverse proxy and authentication layer.
