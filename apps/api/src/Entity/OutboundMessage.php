@@ -18,8 +18,11 @@ use LogicException;
 #[ORM\Entity]
 #[ORM\Table(name: 'outbound_message')]
 #[ORM\UniqueConstraint(
-    name: 'uniq_outbound_message_idempotency_hash',
-    columns: ['idempotency_key_hash'],
+    name: 'uniq_outbound_message_workspace_idempotency_hash',
+    columns: [
+        'workspace_id',
+        'idempotency_key_hash',
+    ],
 )]
 #[ORM\Index(
     name: 'idx_outbound_message_status_list',

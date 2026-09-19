@@ -40,6 +40,12 @@ final readonly class OutboundMessageSubmissionService
         $idempotencyHash =
             $candidate->getIdempotencyKeyHash();
 
+        $lockKey = sprintf(
+            '%d:%s',
+            $workspaceId,
+            $idempotencyHash,
+        );
+
         $connection =
             $this->entityManager->getConnection();
 
@@ -49,12 +55,12 @@ final readonly class OutboundMessageSubmissionService
             $connection->executeQuery(
                 <<<'SQL'
 SELECT pg_advisory_xact_lock(
-    hashtextextended(:idempotency_hash, 0)
+    hashtextextended(:lock_key, 0)
 )
 SQL,
                 [
-                    'idempotency_hash'
-                        => $idempotencyHash,
+                    'lock_key'
+                        => $lockKey,
                 ],
             );
 
@@ -64,6 +70,8 @@ SQL,
                     OutboundMessage::class,
                 )
                 ->findOneBy([
+                    'workspaceId'
+                        => $workspaceId,
                     'idempotencyKeyHash'
                         => $idempotencyHash,
                 ]);
@@ -72,16 +80,6 @@ SQL,
                 $existing
                 instanceof OutboundMessage
             ) {
-                if (
-                    $existing->getWorkspaceId() !== null
-                    && $existing->getWorkspaceId()
-                        !== $workspaceId
-                ) {
-                    throw new IdempotencyConflictException(
-                        'Idempotency key belongs to another workspace.',
-                    );
-                }
-
                 $existingId =
                     $existing->getId();
 
