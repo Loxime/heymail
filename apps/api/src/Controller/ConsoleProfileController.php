@@ -587,9 +587,21 @@ SQL,
     private function profileDocument(
         array $user,
     ): array {
+        $workspaceId = $this->workspaceIdForUser(
+            $user['id'],
+        );
+
         $sentRaw = $this->connection
             ->fetchOne(
-                'SELECT COUNT(*) FROM outbound_message',
+                <<<'SQL'
+SELECT COUNT(*)
+FROM outbound_message
+WHERE workspace_id = :workspace_id
+SQL,
+                [
+                    'workspace_id'
+                        => $workspaceId,
+                ],
             );
 
         if (
@@ -597,11 +609,11 @@ SQL,
             && !is_string($sentRaw)
         ) {
             throw new \RuntimeException(
-                'Unable to read outbound message count.',
+                'Unable to read workspace outbound message count.',
             );
         }
 
-        $instanceSent = (int) $sentRaw;
+        $workspaceSent = (int) $sentRaw;
 
         $favoritesRaw = $this->connection
             ->fetchOne(
@@ -625,8 +637,8 @@ SQL,
         return [
             'user' => $user,
             'stats' => [
-                'messagesSent' => $instanceSent,
-                'messagesSentScope' => 'instance',
+                'messagesSent' => $workspaceSent,
+                'messagesSentScope' => 'workspace',
                 'messagesReceived' => 0,
                 'messagesReceivedAvailable' => false,
                 'favoriteContacts' => $favorites,
@@ -635,6 +647,50 @@ SQL,
                 $user['id'],
             ),
         ];
+    }
+
+    private function workspaceIdForUser(
+        int $userId,
+    ): int {
+        $workspaceIds =
+            $this->connection
+                ->fetchFirstColumn(
+                    <<<'SQL'
+SELECT workspace_id
+FROM workspace_member
+WHERE user_id = :user_id
+ORDER BY workspace_id ASC
+LIMIT 2
+SQL,
+                    [
+                        'user_id'
+                            => $userId,
+                    ],
+                );
+
+        if (count($workspaceIds) !== 1) {
+            throw new \RuntimeException(
+                'Expected exactly one console workspace membership.',
+            );
+        }
+
+        $workspaceId = filter_var(
+            $workspaceIds[0],
+            FILTER_VALIDATE_INT,
+            [
+                'options' => [
+                    'min_range' => 1,
+                ],
+            ],
+        );
+
+        if (!is_int($workspaceId)) {
+            throw new \RuntimeException(
+                'Console workspace has an invalid identifier.',
+            );
+        }
+
+        return $workspaceId;
     }
 
     /**

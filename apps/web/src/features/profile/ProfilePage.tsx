@@ -232,11 +232,7 @@ export function ProfilePage() {
       <section className="profile-stats">
         <ProfileStat
           icon={Mail}
-          label={
-            data.stats.messagesSentScope === 'instance'
-              ? 'Messages envoyés (instance)'
-              : 'Messages envoyés'
-          }
+          label="Messages envoyés (workspace)"
           value={data.stats.messagesSent}
         />
 

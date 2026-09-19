@@ -206,7 +206,7 @@ export interface ConsoleProfileResponse {
   user: ConsoleUser
   stats: {
     messagesSent: number
-    messagesSentScope: 'instance'
+    messagesSentScope: 'workspace'
     messagesReceived: number
     messagesReceivedAvailable: boolean
     favoriteContacts: number
