@@ -23,6 +23,7 @@ WEBHOOK_ID=""
 HISTORICAL_MESSAGE_ID=""
 NEW_MESSAGE_ID=""
 OUTBOX_WAS_RUNNING=0
+WEBHOOK_WORKER_WAS_RUNNING=0
 
 fail() {
     printf 'FAIL: %s\n' "$1" >&2
@@ -77,6 +78,7 @@ cleanup() {
 
     docker compose stop \
         webhook-outbox \
+        webhook-worker \
         >/dev/null 2>&1 \
         || true
 
@@ -283,6 +285,13 @@ PHP
             || true
     fi
 
+    if [ "$WEBHOOK_WORKER_WAS_RUNNING" -eq 1 ]; then
+        docker compose start \
+            webhook-worker \
+            >/dev/null 2>&1 \
+            || true
+    fi
+
     rm -rf "$TMP_DIR"
 
     exit "$RESULT"
@@ -316,12 +325,30 @@ then
     OUTBOX_WAS_RUNNING=1
 fi
 
-# Stop the continuous scheduler so this test can control
-# every outbox pass deterministically.
+WEBHOOK_WORKER_CONTAINER="$(
+    docker compose ps \
+        -q \
+        webhook-worker
+)"
+
+if [ -n "$WEBHOOK_WORKER_CONTAINER" ] \
+    && [ "$(
+        docker inspect \
+            --format '{{.State.Running}}' \
+            "$WEBHOOK_WORKER_CONTAINER"
+    )" = "true" ]
+then
+    WEBHOOK_WORKER_WAS_RUNNING=1
+fi
+
+# Stop both scheduler and consumer so this test can inspect the queued
+# Messenger job deterministically before any HTTP delivery attempt.
 
 docker compose stop \
     webhook-outbox \
-    >/dev/null
+    webhook-worker \
+    >/dev/null 2>&1 \
+    || true
 
 AUTH_B64="$(
     printf '%s:%s' \
@@ -928,12 +955,15 @@ pass "created delivery event after webhook registration"
 FIRST_PASS="$(
     docker compose run \
         --rm \
+        --no-deps \
+        -T \
         webhook-outbox \
         php \
         bin/console \
         app:webhook-outbox \
         --once \
-        --batch=50
+        --batch=50 \
+        </dev/null
 )"
 
 printf '%s\n' "$FIRST_PASS"
@@ -1192,12 +1222,15 @@ pass "historical event is excluded by registration watermark"
 SECOND_PASS="$(
     docker compose run \
         --rm \
+        --no-deps \
+        -T \
         webhook-outbox \
         php \
         bin/console \
         app:webhook-outbox \
         --once \
-        --batch=50
+        --batch=50 \
+        </dev/null
 )"
 
 SECOND_STATE="$(
