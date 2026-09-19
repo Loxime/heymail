@@ -10,6 +10,7 @@ use App\Enum\SendingDomainStatus;
 use App\Mail\SendingDomainRegistrationService;
 use App\Message\ProvisionSendingDomainDkim;
 use App\Message\VerifySendingDomain;
+use App\Workspace\LegacyApiWorkspace;
 use Doctrine\ORM\EntityManagerInterface;
 use InvalidArgumentException;
 use JsonException;
@@ -29,6 +30,7 @@ final readonly class SendingDomainController
         private SendingDomainRegistrationService $registrationService,
         private EntityManagerInterface $entityManager,
         private MessageBusInterface $messageBus,
+        private LegacyApiWorkspace $legacyApiWorkspace,
     ) {
     }
 
@@ -163,11 +165,14 @@ final readonly class SendingDomainController
     public function list(
         Request $request,
     ): JsonResponse {
-        if (
-            !$this->credentials->authorizes(
-                $request,
-            )
-        ) {
+        $principal =
+            $this
+                ->credentials
+                ->authorizedPrincipal(
+                    $request,
+                );
+
+        if ($principal === null) {
             return self::unauthorized();
         }
 
@@ -177,12 +182,32 @@ final readonly class SendingDomainController
                 ->getRepository(
                     SendingDomain::class,
                 )
-                ->findBy(
-                    [],
-                    [
-                        'id' => 'DESC',
-                    ],
-                );
+                ->createQueryBuilder(
+                    'domain',
+                )
+                ->andWhere(
+                    <<<'DQL'
+domain.workspaceId = :workspaceId
+OR (
+    domain.workspaceId IS NULL
+    AND :workspaceId = :legacyWorkspaceId
+)
+DQL
+                )
+                ->setParameter(
+                    'workspaceId',
+                    $principal->workspaceId,
+                )
+                ->setParameter(
+                    'legacyWorkspaceId',
+                    $this->legacyApiWorkspace->id(),
+                )
+                ->orderBy(
+                    'domain.id',
+                    'DESC',
+                )
+                ->getQuery()
+                ->getResult();
 
         return new JsonResponse([
             'items' =>
@@ -210,17 +235,21 @@ final readonly class SendingDomainController
         Request $request,
         string $id,
     ): JsonResponse {
-        if (
-            !$this->credentials->authorizes(
-                $request,
-            )
-        ) {
+        $principal =
+            $this
+                ->credentials
+                ->authorizedPrincipal(
+                    $request,
+                );
+
+        if ($principal === null) {
             return self::unauthorized();
         }
 
         $domain =
             $this->findDomain(
                 $id,
+                $principal->workspaceId,
             );
 
         if (
@@ -253,17 +282,21 @@ final readonly class SendingDomainController
         Request $request,
         string $id,
     ): JsonResponse {
-        if (
-            !$this->credentials->authorizes(
-                $request,
-            )
-        ) {
+        $principal =
+            $this
+                ->credentials
+                ->authorizedPrincipal(
+                    $request,
+                );
+
+        if ($principal === null) {
             return self::unauthorized();
         }
 
         $domain =
             $this->findDomain(
                 $id,
+                $principal->workspaceId,
             );
 
         if (
@@ -346,17 +379,21 @@ final readonly class SendingDomainController
         Request $request,
         string $id,
     ): JsonResponse {
-        if (
-            !$this->credentials->authorizes(
-                $request,
-            )
-        ) {
+        $principal =
+            $this
+                ->credentials
+                ->authorizedPrincipal(
+                    $request,
+                );
+
+        if ($principal === null) {
             return self::unauthorized();
         }
 
         $domain =
             $this->findDomain(
                 $id,
+                $principal->workspaceId,
             );
 
         if (
@@ -431,6 +468,7 @@ final readonly class SendingDomainController
 
     private function findDomain(
         string $id,
+        int $workspaceId,
     ): ?SendingDomain {
         $domainId =
             filter_var(
@@ -450,10 +488,38 @@ final readonly class SendingDomainController
         $domain =
             $this
                 ->entityManager
-                ->find(
+                ->getRepository(
                     SendingDomain::class,
+                )
+                ->createQueryBuilder(
+                    'domain',
+                )
+                ->andWhere(
+                    'domain.id = :domainId',
+                )
+                ->andWhere(
+                    <<<'DQL'
+domain.workspaceId = :workspaceId
+OR (
+    domain.workspaceId IS NULL
+    AND :workspaceId = :legacyWorkspaceId
+)
+DQL
+                )
+                ->setParameter(
+                    'domainId',
                     $domainId,
-                );
+                )
+                ->setParameter(
+                    'workspaceId',
+                    $workspaceId,
+                )
+                ->setParameter(
+                    'legacyWorkspaceId',
+                    $this->legacyApiWorkspace->id(),
+                )
+                ->getQuery()
+                ->getOneOrNullResult();
 
         return $domain
             instanceof SendingDomain

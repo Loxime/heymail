@@ -30,13 +30,14 @@ final readonly class DashboardController
     public function dashboard(
         Request $request,
     ): JsonResponse {
-        if (
-            !$this
+        $principal =
+            $this
                 ->credentials
-                ->authorizes(
+                ->authorizedPrincipal(
                     $request,
-                )
-        ) {
+                );
+
+        if ($principal === null) {
             return self::unauthorized();
         }
 
@@ -101,6 +102,7 @@ final readonly class DashboardController
                 ->dashboardQuery
                 ->query(
                     $period,
+                    $principal->workspaceId,
                 ),
         );
     }

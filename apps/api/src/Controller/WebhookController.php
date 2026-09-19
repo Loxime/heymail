@@ -221,12 +221,14 @@ final readonly class WebhookController
     public function list(
         Request $request,
     ): JsonResponse {
-        if (
-            !$this->credentials
-                ->authorizes(
+        $principal =
+            $this
+                ->credentials
+                ->authorizedPrincipal(
                     $request,
-                )
-        ) {
+                );
+
+        if ($principal === null) {
             return self::unauthorized();
         }
 
@@ -235,7 +237,9 @@ final readonly class WebhookController
         foreach (
             $this
                 ->registrationService
-                ->all()
+                ->all(
+                    $principal->workspaceId,
+                )
             as $endpoint
         ) {
             $items[] = [

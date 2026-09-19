@@ -6,6 +6,7 @@ namespace App\Query;
 
 use App\Enum\OutboundMessageEventType;
 use App\Enum\OutboundMessageStatus;
+use App\Workspace\LegacyApiWorkspace;
 use DateTimeImmutable;
 use DateTimeZone;
 use Doctrine\DBAL\Connection;
@@ -16,6 +17,7 @@ final readonly class OutboundMessageQueryService
     public function __construct(
         private Connection $connection,
         private MessageCursorCodec $cursorCodec,
+        private LegacyApiWorkspace $legacyApiWorkspace,
     ) {
     }
 
@@ -39,6 +41,7 @@ final readonly class OutboundMessageQueryService
      * }
      */
     public function list(
+        int $workspaceId,
         int $limit,
         ?string $cursor,
         ?OutboundMessageStatus $status,
@@ -46,9 +49,33 @@ final readonly class OutboundMessageQueryService
         ?DateTimeImmutable $createdAfter,
         ?DateTimeImmutable $createdBefore,
     ): array {
-        $where = [];
-        $parameters = [];
-        $types = [];
+        $where = [
+            <<<'SQL'
+(
+    om.workspace_id = :workspace_id
+    OR (
+        om.workspace_id IS NULL
+        AND :workspace_id = :legacy_workspace_id
+    )
+)
+SQL,
+        ];
+
+        $parameters = [
+            'workspace_id'
+                => $workspaceId,
+            'legacy_workspace_id'
+                => $this
+                    ->legacyApiWorkspace
+                    ->id(),
+        ];
+
+        $types = [
+            'workspace_id'
+                => ParameterType::INTEGER,
+            'legacy_workspace_id'
+                => ParameterType::INTEGER,
+        ];
 
         if ($cursor !== null) {
             $where[] =

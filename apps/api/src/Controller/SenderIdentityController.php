@@ -9,6 +9,7 @@ use App\Entity\SenderIdentity;
 use App\Mail\SenderDomainNotReadyException;
 use App\Mail\SenderDomainNotVerifiedException;
 use App\Mail\SenderIdentityRegistrationService;
+use App\Workspace\LegacyApiWorkspace;
 use Doctrine\ORM\EntityManagerInterface;
 use InvalidArgumentException;
 use JsonException;
@@ -26,6 +27,7 @@ final readonly class SenderIdentityController
         private ApiCredentials $credentials,
         private SenderIdentityRegistrationService $registrationService,
         private EntityManagerInterface $entityManager,
+        private LegacyApiWorkspace $legacyApiWorkspace,
     ) {
     }
 
@@ -172,11 +174,14 @@ final readonly class SenderIdentityController
     public function list(
         Request $request,
     ): JsonResponse {
-        if (
-            !$this->credentials->authorizes(
-                $request,
-            )
-        ) {
+        $principal =
+            $this
+                ->credentials
+                ->authorizedPrincipal(
+                    $request,
+                );
+
+        if ($principal === null) {
             return self::unauthorized();
         }
 
@@ -186,12 +191,36 @@ final readonly class SenderIdentityController
                 ->getRepository(
                     SenderIdentity::class,
                 )
-                ->findBy(
-                    [],
-                    [
-                        'id' => 'DESC',
-                    ],
-                );
+                ->createQueryBuilder(
+                    'sender',
+                )
+                ->innerJoin(
+                    'sender.sendingDomain',
+                    'domain',
+                )
+                ->andWhere(
+                    <<<'DQL'
+domain.workspaceId = :workspaceId
+OR (
+    domain.workspaceId IS NULL
+    AND :workspaceId = :legacyWorkspaceId
+)
+DQL
+                )
+                ->setParameter(
+                    'workspaceId',
+                    $principal->workspaceId,
+                )
+                ->setParameter(
+                    'legacyWorkspaceId',
+                    $this->legacyApiWorkspace->id(),
+                )
+                ->orderBy(
+                    'sender.id',
+                    'DESC',
+                )
+                ->getQuery()
+                ->getResult();
 
         return new JsonResponse([
             'items' =>
@@ -219,11 +248,14 @@ final readonly class SenderIdentityController
         Request $request,
         string $id,
     ): JsonResponse {
-        if (
-            !$this->credentials->authorizes(
-                $request,
-            )
-        ) {
+        $principal =
+            $this
+                ->credentials
+                ->authorizedPrincipal(
+                    $request,
+                );
+
+        if ($principal === null) {
             return self::unauthorized();
         }
 
@@ -245,10 +277,42 @@ final readonly class SenderIdentityController
         $sender =
             $this
                 ->entityManager
-                ->find(
+                ->getRepository(
                     SenderIdentity::class,
+                )
+                ->createQueryBuilder(
+                    'sender',
+                )
+                ->innerJoin(
+                    'sender.sendingDomain',
+                    'domain',
+                )
+                ->andWhere(
+                    'sender.id = :senderId',
+                )
+                ->andWhere(
+                    <<<'DQL'
+domain.workspaceId = :workspaceId
+OR (
+    domain.workspaceId IS NULL
+    AND :workspaceId = :legacyWorkspaceId
+)
+DQL
+                )
+                ->setParameter(
+                    'senderId',
                     $senderId,
-                );
+                )
+                ->setParameter(
+                    'workspaceId',
+                    $principal->workspaceId,
+                )
+                ->setParameter(
+                    'legacyWorkspaceId',
+                    $this->legacyApiWorkspace->id(),
+                )
+                ->getQuery()
+                ->getOneOrNullResult();
 
         if (
             !$sender

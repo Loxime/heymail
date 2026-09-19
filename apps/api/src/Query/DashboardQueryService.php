@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Query;
 
+use App\Workspace\LegacyApiWorkspace;
 use DateTimeImmutable;
 use DateTimeZone;
 use Doctrine\DBAL\Connection;
@@ -12,6 +13,7 @@ final readonly class DashboardQueryService
 {
     public function __construct(
         private Connection $connection,
+        private LegacyApiWorkspace $legacyApiWorkspace,
     ) {
     }
 
@@ -20,8 +22,15 @@ final readonly class DashboardQueryService
      */
     public function query(
         DashboardPeriod $period,
+        int $workspaceId,
     ): array {
         $parameters = [
+            'workspace_id'
+                => $workspaceId,
+            'legacy_workspace_id'
+                => $this
+                    ->legacyApiWorkspace
+                    ->id(),
             'from'
                 => self::databaseTimestamp(
                     $period->from,
@@ -54,7 +63,14 @@ SELECT
         WHERE status = 'submitted'
     ) AS submitted
 FROM outbound_message
-WHERE created_at >= :from
+WHERE (
+        workspace_id = :workspace_id
+        OR (
+            workspace_id IS NULL
+            AND :workspace_id = :legacy_workspace_id
+        )
+    )
+  AND created_at >= :from
   AND created_at < :to
 SQL,
                     $parameters,
@@ -78,10 +94,19 @@ SELECT
     COUNT(*) FILTER (
         WHERE event_type = 'bounced'
     ) AS bounced
-FROM outbound_message_event
-WHERE occurred_at >= :from
-  AND occurred_at < :to
-  AND event_type IN (
+FROM outbound_message_event ome
+INNER JOIN outbound_message om
+    ON om.id = ome.outbound_message_id
+WHERE (
+        om.workspace_id = :workspace_id
+        OR (
+            om.workspace_id IS NULL
+            AND :workspace_id = :legacy_workspace_id
+        )
+    )
+  AND ome.occurred_at >= :from
+  AND ome.occurred_at < :to
+  AND ome.event_type IN (
       'delivered',
       'tempfail',
       'bounced'
@@ -141,7 +166,7 @@ event_counts AS (
     SELECT
         date_trunc(
             'day',
-            occurred_at
+            ome.occurred_at
         ) AS day,
         COUNT(*) FILTER (
             WHERE event_type = 'submitted'
@@ -155,10 +180,19 @@ event_counts AS (
         COUNT(*) FILTER (
             WHERE event_type = 'bounced'
         ) AS bounced
-    FROM outbound_message_event
-    WHERE occurred_at >= :from
-      AND occurred_at < :to
-      AND event_type IN (
+    FROM outbound_message_event ome
+    INNER JOIN outbound_message om
+        ON om.id = ome.outbound_message_id
+    WHERE (
+            om.workspace_id = :workspace_id
+            OR (
+                om.workspace_id IS NULL
+                AND :workspace_id = :legacy_workspace_id
+            )
+        )
+      AND ome.occurred_at >= :from
+      AND ome.occurred_at < :to
+      AND ome.event_type IN (
           'submitted',
           'tempfail',
           'delivered',
@@ -167,7 +201,7 @@ event_counts AS (
     GROUP BY
         date_trunc(
             'day',
-            occurred_at
+            ome.occurred_at
         )
 )
 SELECT

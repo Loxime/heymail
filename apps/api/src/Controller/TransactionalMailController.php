@@ -14,6 +14,7 @@ use App\Mail\OutboundEmailPayload;
 use App\Mail\OutboundMessageSubmissionService;
 use App\Mail\SenderAuthorizationService;
 use App\Query\OutboundMessageQueryService;
+use App\Workspace\LegacyApiWorkspace;
 use DateTimeImmutable;
 use DateTimeZone;
 use Doctrine\ORM\EntityManagerInterface;
@@ -36,6 +37,7 @@ final readonly class TransactionalMailController
         private SenderAuthorizationService $senderAuthorization,
         private EntityManagerInterface $entityManager,
         private OutboundMessageQueryService $messageQuery,
+        private LegacyApiWorkspace $legacyApiWorkspace,
     ) {
     }
 
@@ -226,11 +228,14 @@ final readonly class TransactionalMailController
     public function messages(
         Request $request,
     ): JsonResponse {
-        if (
-            !$this->credentials->authorizes(
-                $request,
-            )
-        ) {
+        $principal =
+            $this
+                ->credentials
+                ->authorizedPrincipal(
+                    $request,
+                );
+
+        if ($principal === null) {
             return self::unauthorized();
         }
 
@@ -393,6 +398,7 @@ final readonly class TransactionalMailController
                 $this
                     ->messageQuery
                     ->list(
+                        workspaceId: $principal->workspaceId,
                         limit: $limit,
                         cursor: $cursor,
                         status: $status,
@@ -425,11 +431,14 @@ final readonly class TransactionalMailController
         Request $request,
         string $id,
     ): JsonResponse {
-        if (
-            !$this->credentials->authorizes(
-                $request,
-            )
-        ) {
+        $principal =
+            $this
+                ->credentials
+                ->authorizedPrincipal(
+                    $request,
+                );
+
+        if ($principal === null) {
             return self::unauthorized();
         }
 
@@ -461,6 +470,10 @@ final readonly class TransactionalMailController
         if (
             !$message
             instanceof OutboundMessage
+            || (
+                $message->getWorkspaceId()
+                    ?? $this->legacyApiWorkspace->id()
+            ) !== $principal->workspaceId
         ) {
             return self::error(
                 'message_not_found',

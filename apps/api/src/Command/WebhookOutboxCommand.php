@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Command;
 
 use App\Message\DeliverWebhook;
+use App\Workspace\LegacyApiWorkspace;
 use Doctrine\DBAL\Connection;
 use Doctrine\DBAL\ParameterType;
 use Symfony\Component\Console\Attribute\AsCommand;
@@ -24,6 +25,7 @@ final class WebhookOutboxCommand extends Command
     public function __construct(
         private readonly Connection $connection,
         private readonly MessageBusInterface $messageBus,
+        private readonly LegacyApiWorkspace $legacyApiWorkspace,
     ) {
         parent::__construct();
     }
@@ -135,6 +137,11 @@ final class WebhookOutboxCommand extends Command
     private function runPass(
         int $batch,
     ): array {
+        $legacyWorkspaceId =
+            $this
+                ->legacyApiWorkspace
+                ->id();
+
         $this->connection
             ->beginTransaction();
 
@@ -182,13 +189,30 @@ INNER JOIN webhook_endpoint_subscription wes
 INNER JOIN outbound_message_event ome
     ON ome.event_type = wes.event_type
    AND ome.id > we.starts_after_event_id
+INNER JOIN outbound_message om
+    ON om.id = ome.outbound_message_id
 WHERE we.enabled = TRUE
+  AND COALESCE(
+      we.workspace_id,
+      :legacy_workspace_id
+  ) = COALESCE(
+      om.workspace_id,
+      :legacy_workspace_id
+  )
 ON CONFLICT (
     webhook_endpoint_id,
     outbound_message_event_id
 )
 DO NOTHING
-SQL
+SQL,
+                        [
+                            'legacy_workspace_id'
+                                => $legacyWorkspaceId,
+                        ],
+                        [
+                            'legacy_workspace_id'
+                                => ParameterType::INTEGER,
+                        ],
                     );
 
             $rows =

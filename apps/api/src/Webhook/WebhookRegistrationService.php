@@ -6,6 +6,7 @@ namespace App\Webhook;
 
 use App\Entity\WebhookEndpoint;
 use App\Enum\OutboundMessageEventType;
+use App\Workspace\LegacyApiWorkspace;
 use Doctrine\ORM\EntityManagerInterface;
 
 final readonly class WebhookRegistrationService
@@ -13,6 +14,7 @@ final readonly class WebhookRegistrationService
     public function __construct(
         private EntityManagerInterface $entityManager,
         private WebhookSecretCipher $secretCipher,
+        private LegacyApiWorkspace $legacyApiWorkspace,
     ) {
     }
 
@@ -88,19 +90,46 @@ SQL
     /**
      * @return list<WebhookEndpoint>
      */
-    public function all(): array
-    {
+    public function all(
+        int $workspaceId,
+    ): array {
+        if ($workspaceId < 1) {
+            throw new \InvalidArgumentException(
+                'Invalid workspace.',
+            );
+        }
+
         return $this
             ->entityManager
             ->getRepository(
                 WebhookEndpoint::class,
             )
-            ->findBy(
-                [],
-                [
-                    'id' => 'DESC',
-                ],
-            );
+            ->createQueryBuilder(
+                'endpoint',
+            )
+            ->andWhere(
+                <<<'DQL'
+endpoint.workspaceId = :workspaceId
+OR (
+    endpoint.workspaceId IS NULL
+    AND :workspaceId = :legacyWorkspaceId
+)
+DQL
+            )
+            ->setParameter(
+                'workspaceId',
+                $workspaceId,
+            )
+            ->setParameter(
+                'legacyWorkspaceId',
+                $this->legacyApiWorkspace->id(),
+            )
+            ->orderBy(
+                'endpoint.id',
+                'DESC',
+            )
+            ->getQuery()
+            ->getResult();
     }
 
     private static function base64Url(
