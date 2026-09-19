@@ -883,6 +883,7 @@ $stmt =
     $pdo->prepare(
         <<<'SQL'
 INSERT INTO outbound_message (
+    workspace_id,
     idempotency_key_hash,
     status,
     created_at,
@@ -891,6 +892,13 @@ INSERT INTO outbound_message (
     submitted_at
 )
 VALUES (
+    (
+        SELECT id
+        FROM workspace
+        WHERE name = 'HeyMail Legacy Workspace'
+        ORDER BY id ASC
+        LIMIT 1
+    ),
     :hash,
     'submitted',
     timezone('UTC', CURRENT_TIMESTAMP),

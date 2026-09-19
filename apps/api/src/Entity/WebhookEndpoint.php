@@ -37,7 +37,7 @@ final class WebhookEndpoint
     #[ORM\Column(
         name: 'workspace_id',
         type: Types::BIGINT,
-        nullable: true,
+        nullable: false,
     )]
     private ?int $workspaceId = null;
 

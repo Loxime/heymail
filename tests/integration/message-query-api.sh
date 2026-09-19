@@ -299,6 +299,7 @@ try {
     $insertMessage = $pdo->prepare(
         <<<'SQL'
 INSERT INTO outbound_message (
+    workspace_id,
     idempotency_key_hash,
     status,
     created_at,
@@ -308,6 +309,13 @@ INSERT INTO outbound_message (
     submitted_at
 )
 VALUES (
+    (
+        SELECT id
+        FROM workspace
+        WHERE name = 'HeyMail Legacy Workspace'
+        ORDER BY id ASC
+        LIMIT 1
+    ),
     :hash,
     :status,
     :created_at,
@@ -718,11 +726,19 @@ $pdo = new PDO(
 $stmt = $pdo->prepare(
     <<<'SQL'
 INSERT INTO outbound_message (
+    workspace_id,
     idempotency_key_hash,
     status,
     created_at
 )
 VALUES (
+    (
+        SELECT id
+        FROM workspace
+        WHERE name = 'HeyMail Legacy Workspace'
+        ORDER BY id ASC
+        LIMIT 1
+    ),
     :hash,
     'queued',
     '2042-01-01 00:00:05'

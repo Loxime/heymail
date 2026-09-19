@@ -407,6 +407,7 @@ $domainInsert =
     $pdo->prepare(
         <<<'SQL'
 INSERT INTO sending_domain (
+    workspace_id,
     domain,
     status,
     verification_token,
@@ -419,6 +420,13 @@ INSERT INTO sending_domain (
     dkim_provisioned_at
 )
 VALUES (
+    (
+        SELECT id
+        FROM workspace
+        WHERE name = 'HeyMail Legacy Workspace'
+        ORDER BY id ASC
+        LIMIT 1
+    ),
     :domain,
     'verified',
     :token,
@@ -432,6 +440,7 @@ VALUES (
 )
 ON CONFLICT (domain) DO UPDATE
 SET
+    workspace_id = EXCLUDED.workspace_id,
     status = 'verified',
     verification_checked_at = EXCLUDED.verification_checked_at,
     verified_at = EXCLUDED.verified_at,

@@ -322,7 +322,6 @@ SQL,
     foreach ([
         'legacy-message',
         'foreign-message',
-        'nullable-message',
     ] as $suffix) {
         $hashes[] =
             hash(
@@ -947,48 +946,6 @@ SQL
                 . ':foreign',
         );
 
-    $insertMessage->execute([
-        'workspace_id'
-            => null,
-        'hash'
-            => hash(
-                'sha256',
-                $token
-                    . ':nullable-message',
-            ),
-        'status'
-            => 'queued',
-        'created_at'
-            => '2099-07-11 10:00:00',
-        'ready_at'
-            => null,
-        'submitting_at'
-            => null,
-        'submitted_at'
-            => null,
-    ]);
-
-    $nullableMessageId =
-        (int) $insertMessage
-            ->fetchColumn();
-
-    $insertEvent->execute([
-        'message_id'
-            => $nullableMessageId,
-        'event_type'
-            => 'queued',
-        'occurred_at'
-            => '2099-07-11 10:00:00',
-        'recipient_hash'
-            => null,
-        'smtp_status'
-            => null,
-        'detail'
-            => null,
-        'source_event_id'
-            => null,
-    ]);
-
     $pdo->commit();
 
     foreach ([
@@ -1008,8 +965,6 @@ SQL
             => $legacyMessageId,
         'FOREIGN_MESSAGE_ID'
             => $foreignMessageId,
-        'NULLABLE_MESSAGE_ID'
-            => $nullableMessageId,
         'LEGACY_EVENT_ID'
             => $legacyEventId,
         'FOREIGN_EVENT_ID'
@@ -1066,10 +1021,6 @@ FOREIGN_MESSAGE_ID="$(
     value_from_fixture \
         FOREIGN_MESSAGE_ID
 )"
-NULLABLE_MESSAGE_ID="$(
-    value_from_fixture \
-        NULLABLE_MESSAGE_ID
-)"
 LEGACY_EVENT_ID="$(
     value_from_fixture \
         LEGACY_EVENT_ID
@@ -1086,7 +1037,6 @@ for value in \
     "$FOREIGN_ENDPOINT_ID" \
     "$LEGACY_MESSAGE_ID" \
     "$FOREIGN_MESSAGE_ID" \
-    "$NULLABLE_MESSAGE_ID" \
     "$LEGACY_EVENT_ID" \
     "$FOREIGN_EVENT_ID"
 do
@@ -1094,7 +1044,7 @@ do
         || fail "invalid hostile fixture identifier"
 done
 
-pass "seeded explicit legacy, nullable legacy-compatible and foreign resources"
+pass "seeded explicit legacy and foreign resources"
 
 # ---------------------------------------------------------------------------
 # Message list and detail isolation.
@@ -1115,12 +1065,11 @@ authenticated_request \
 python3 \
     - "$MESSAGE_LIST_BODY" \
     "$LEGACY_MESSAGE_ID" \
-    "$NULLABLE_MESSAGE_ID" \
     "$FOREIGN_MESSAGE_ID" <<'PY'
 import json
 import sys
 
-path, legacy_id, nullable_id, foreign_id = sys.argv[1:]
+path, legacy_id, foreign_id = sys.argv[1:]
 
 with open(
     path,
@@ -1138,18 +1087,13 @@ if legacy_id not in ids:
         "explicit legacy message missing"
     )
 
-if nullable_id not in ids:
-    raise SystemExit(
-        "NULL legacy-compatible message missing"
-    )
-
 if foreign_id in ids:
     raise SystemExit(
         "foreign message leaked in list"
     )
 PY
 
-pass "message list hides foreign workspace and preserves NULL legacy compatibility"
+pass "message list hides foreign workspace"
 
 FOREIGN_MESSAGE_HEADERS="$TMP_DIR/foreign-message.headers"
 FOREIGN_MESSAGE_BODY="$TMP_DIR/foreign-message.body"
@@ -1162,18 +1106,6 @@ authenticated_request \
 
 [ "$(http_code "$FOREIGN_MESSAGE_HEADERS")" = "404" ] \
     || fail "foreign message detail is visible"
-
-NULLABLE_MESSAGE_HEADERS="$TMP_DIR/nullable-message.headers"
-NULLABLE_MESSAGE_BODY="$TMP_DIR/nullable-message.body"
-
-authenticated_request \
-    GET \
-    "$API_ORIGIN/api/v1/messages/$NULLABLE_MESSAGE_ID" \
-    "$NULLABLE_MESSAGE_HEADERS" \
-    "$NULLABLE_MESSAGE_BODY"
-
-[ "$(http_code "$NULLABLE_MESSAGE_HEADERS")" = "200" ] \
-    || fail "NULL legacy-compatible message is not readable"
 
 pass "message detail fails closed for foreign workspace"
 
@@ -1320,7 +1252,7 @@ PY
 pass "webhook registry hides foreign endpoint"
 
 # ---------------------------------------------------------------------------
-# Dashboard must aggregate explicit + nullable legacy only.
+# Dashboard must aggregate the explicit legacy workspace only.
 # Foreign message/event must not inflate any metric.
 # ---------------------------------------------------------------------------
 
@@ -1350,8 +1282,8 @@ with open(
 messages = payload["messages"]
 
 expected_messages = {
-    "total": 2,
-    "queued": 1,
+    "total": 1,
+    "queued": 0,
     "readyForSubmission": 0,
     "submitting": 0,
     "submissionUncertain": 0,
@@ -1636,7 +1568,6 @@ echo
 echo "FOREIGN_DOMAIN_ID=$FOREIGN_DOMAIN_ID"
 echo "FOREIGN_SENDER_ID=$FOREIGN_SENDER_ID"
 echo "FOREIGN_MESSAGE_ID=$FOREIGN_MESSAGE_ID"
-echo "NULLABLE_MESSAGE_ID=$NULLABLE_MESSAGE_ID"
 echo "LEGACY_WEBHOOK_ID=$LEGACY_WEBHOOK_ID"
 echo "FOREIGN_WEBHOOK_ID=$FOREIGN_WEBHOOK_ID"
 echo

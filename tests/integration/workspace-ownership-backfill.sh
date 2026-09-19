@@ -145,11 +145,7 @@ foreach ($columns as $column) {
         (string) $column['is_nullable'],
         PHP_EOL;
 
-    /*
-     * Expected during the expand phase. The next ownership commit will
-     * enforce non-null writes before the contract migration.
-     */
-    if ($column['is_nullable'] !== 'YES') {
+    if ($column['is_nullable'] !== 'NO') {
         exit(7);
     }
 }
@@ -202,9 +198,9 @@ grep -Fxq 'SENDING_DOMAIN_OTHER_WORKSPACE=0' <<<"$RESULT"
 grep -Fxq 'OUTBOUND_MESSAGE_OTHER_WORKSPACE=0' <<<"$RESULT"
 grep -Fxq 'WEBHOOK_ENDPOINT_OTHER_WORKSPACE=0' <<<"$RESULT"
 
-grep -Fxq 'SENDING_DOMAIN_NULLABLE=YES' <<<"$RESULT"
-grep -Fxq 'OUTBOUND_MESSAGE_NULLABLE=YES' <<<"$RESULT"
-grep -Fxq 'WEBHOOK_ENDPOINT_NULLABLE=YES' <<<"$RESULT"
+grep -Fxq 'SENDING_DOMAIN_NULLABLE=NO' <<<"$RESULT"
+grep -Fxq 'OUTBOUND_MESSAGE_NULLABLE=NO' <<<"$RESULT"
+grep -Fxq 'WEBHOOK_ENDPOINT_NULLABLE=NO' <<<"$RESULT"
 
 grep -Fxq 'FK_SENDING_DOMAIN_WORKSPACE_DELETE_RULE=RESTRICT' <<<"$RESULT"
 grep -Fxq 'FK_OUTBOUND_MESSAGE_WORKSPACE_DELETE_RULE=RESTRICT' <<<"$RESULT"
