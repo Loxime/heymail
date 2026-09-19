@@ -223,6 +223,24 @@ if (
     );
 }
 
+$workspaceId = (int) $entityManager
+    ->getConnection()
+    ->fetchOne(
+        <<<'SQL'
+SELECT id
+FROM workspace
+WHERE name = 'HeyMail Legacy Workspace'
+ORDER BY id ASC
+LIMIT 1
+SQL
+    );
+
+if ($workspaceId < 1) {
+    throw new RuntimeException(
+        'Legacy workspace unavailable.',
+    );
+}
+
 $submission =
     new OutboundMessageSubmissionService(
         $entityManager,
@@ -254,11 +272,13 @@ $payload = new OutboundEmailPayload(
 $first = $submission->submit(
     $idempotencyKey,
     $payload,
+    $workspaceId,
 );
 
 $second = $submission->submit(
     $idempotencyKey,
     $payload,
+    $workspaceId,
 );
 
 if (
@@ -300,6 +320,7 @@ try {
             subject: 'Conflicting submission',
             textPart: 'DIFFERENT-PAYLOAD',
         ),
+        $workspaceId,
     );
 } catch (IdempotencyConflictException) {
     $conflictDetected = true;
@@ -388,6 +409,7 @@ try {
     $failingSubmission->submit(
         $rollbackKey,
         $payload,
+        $workspaceId,
     );
 
     throw new RuntimeException(

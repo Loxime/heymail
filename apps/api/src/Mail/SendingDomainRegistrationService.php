@@ -17,7 +17,14 @@ final readonly class SendingDomainRegistrationService
 
     public function register(
         string $rawDomain,
+        int $workspaceId,
     ): SendingDomainRegistration {
+        if ($workspaceId < 1) {
+            throw new \InvalidArgumentException(
+                'Invalid workspace.',
+            );
+        }
+
         $domainName =
             new DomainName(
                 $rawDomain,
@@ -59,6 +66,16 @@ SQL,
                 $existing
                 instanceof SendingDomain
             ) {
+                if (
+                    $existing->getWorkspaceId() !== null
+                    && $existing->getWorkspaceId()
+                        !== $workspaceId
+                ) {
+                    throw new \InvalidArgumentException(
+                        'Sending domain is already registered.',
+                    );
+                }
+
                 $connection->commit();
 
                 return new SendingDomainRegistration(
@@ -69,10 +86,11 @@ SQL,
 
             $domain =
                 new SendingDomain(
-                    $domainName,
-                    bin2hex(
+                    domain: $domainName,
+                    verificationToken: bin2hex(
                         random_bytes(32),
                     ),
+                    workspaceId: $workspaceId,
                 );
 
             $this->entityManager

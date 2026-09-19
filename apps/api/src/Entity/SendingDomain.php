@@ -23,6 +23,13 @@ use LogicException;
     name: 'uniq_sending_domain_verification_token',
     columns: ['verification_token'],
 )]
+#[ORM\Index(
+    name: 'idx_sending_domain_workspace',
+    columns: [
+        'workspace_id',
+        'id',
+    ],
+)]
 final class SendingDomain
 {
     #[ORM\Id]
@@ -30,6 +37,13 @@ final class SendingDomain
     #[ORM\Column(type: Types::BIGINT)]
     // @phpstan-ignore property.unusedType
     private ?int $id = null;
+
+    #[ORM\Column(
+        name: 'workspace_id',
+        type: Types::BIGINT,
+        nullable: true,
+    )]
+    private ?int $workspaceId = null;
 
     #[ORM\Column(
         type: Types::STRING,
@@ -99,7 +113,19 @@ final class SendingDomain
         DomainName $domain,
         string $verificationToken,
         ?DateTimeImmutable $createdAt = null,
+        ?int $workspaceId = null,
     ) {
+        if (
+            $workspaceId !== null
+            && $workspaceId < 1
+        ) {
+            throw new InvalidArgumentException(
+                'Invalid sending domain workspace.',
+            );
+        }
+
+        $this->workspaceId = $workspaceId;
+
         if (
             preg_match(
                 '/^[a-f0-9]{64}$/D',
@@ -128,6 +154,11 @@ final class SendingDomain
     public function getId(): ?int
     {
         return $this->id;
+    }
+
+    public function getWorkspaceId(): ?int
+    {
+        return $this->workspaceId;
     }
 
     public function getDomain(): string

@@ -17,7 +17,12 @@ final readonly class SenderAuthorizationService
 
     public function authorizes(
         EmailAddress $from,
+        int $workspaceId,
     ): bool {
+        if ($workspaceId < 1) {
+            return false;
+        }
+
         try {
             $canonical =
                 new SenderEmailAddress(
@@ -38,8 +43,20 @@ final readonly class SenderAuthorizationService
                         => $canonical->value,
                 ]);
 
-        return $sender
+        if (
+            !$sender
             instanceof SenderIdentity
-            && $sender->isAuthorized();
+            || !$sender->isAuthorized()
+        ) {
+            return false;
+        }
+
+        $senderWorkspaceId =
+            $sender
+                ->getSendingDomain()
+                ->getWorkspaceId();
+
+        return $senderWorkspaceId === null
+            || $senderWorkspaceId === $workspaceId;
     }
 }

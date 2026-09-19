@@ -20,12 +20,26 @@ use InvalidArgumentException;
     name: 'uniq_webhook_endpoint_public_id',
     columns: ['public_id'],
 )]
+#[ORM\Index(
+    name: 'idx_webhook_endpoint_workspace',
+    columns: [
+        'workspace_id',
+        'id',
+    ],
+)]
 final class WebhookEndpoint
 {
     #[ORM\Id]
     #[ORM\GeneratedValue]
     #[ORM\Column(type: Types::BIGINT)]
     private ?int $id = null;
+
+    #[ORM\Column(
+        name: 'workspace_id',
+        type: Types::BIGINT,
+        nullable: true,
+    )]
+    private ?int $workspaceId = null;
 
     #[ORM\Column(
         name: 'public_id',
@@ -103,7 +117,19 @@ final class WebhookEndpoint
         int $startsAfterEventId,
         EncryptedWebhookSecret $secret,
         array $eventTypes,
+        ?int $workspaceId = null,
     ) {
+        if (
+            $workspaceId !== null
+            && $workspaceId < 1
+        ) {
+            throw new InvalidArgumentException(
+                'Invalid webhook workspace.',
+            );
+        }
+
+        $this->workspaceId = $workspaceId;
+
         if (
             preg_match(
                 '/^wh_[a-f0-9]{32}$/D',
@@ -188,6 +214,11 @@ final class WebhookEndpoint
     public function getId(): ?int
     {
         return $this->id;
+    }
+
+    public function getWorkspaceId(): ?int
+    {
+        return $this->workspaceId;
     }
 
     public function getPublicId(): string

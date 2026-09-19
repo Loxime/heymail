@@ -22,7 +22,14 @@ final readonly class WebhookRegistrationService
     public function create(
         string $url,
         array $eventTypes,
+        int $workspaceId,
     ): WebhookRegistration {
+        if ($workspaceId < 1) {
+            throw new \InvalidArgumentException(
+                'Invalid workspace.',
+            );
+        }
+
         $connection =
             $this->entityManager
                 ->getConnection();
@@ -63,6 +70,7 @@ SQL
                 startsAfterEventId: $watermark,
                 secret: $encrypted,
                 eventTypes: $eventTypes,
+                workspaceId: $workspaceId,
             );
 
         $this->entityManager->persist(

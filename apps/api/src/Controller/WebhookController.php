@@ -31,12 +31,14 @@ final readonly class WebhookController
     public function create(
         Request $request,
     ): JsonResponse {
-        if (
-            !$this->credentials
-                ->authorizes(
+        $principal =
+            $this
+                ->credentials
+                ->authorizedPrincipal(
                     $request,
-                )
-        ) {
+                );
+
+        if ($principal === null) {
             return self::unauthorized();
         }
 
@@ -155,6 +157,7 @@ final readonly class WebhookController
                     ->create(
                         $url,
                         $eventTypes,
+                        $principal->workspaceId,
                     );
         } catch (InvalidArgumentException $exception) {
             return self::error(

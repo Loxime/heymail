@@ -35,6 +35,13 @@ use LogicException;
         'id',
     ],
 )]
+#[ORM\Index(
+    name: 'idx_outbound_message_workspace',
+    columns: [
+        'workspace_id',
+        'id',
+    ],
+)]
 final class OutboundMessage
 {
     #[ORM\Id]
@@ -42,6 +49,13 @@ final class OutboundMessage
     #[ORM\Column(type: Types::BIGINT)]
     // @phpstan-ignore property.unusedType
     private ?int $id = null;
+
+    #[ORM\Column(
+        name: 'workspace_id',
+        type: Types::BIGINT,
+        nullable: true,
+    )]
+    private ?int $workspaceId = null;
 
     #[ORM\Column(
         name: 'idempotency_key_hash',
@@ -98,8 +112,21 @@ final class OutboundMessage
     ])]
     private Collection $events;
 
-    public function __construct(string $idempotencyKey)
-    {
+    public function __construct(
+        string $idempotencyKey,
+        ?int $workspaceId = null,
+    ) {
+        if (
+            $workspaceId !== null
+            && $workspaceId < 1
+        ) {
+            throw new InvalidArgumentException(
+                'Invalid outbound message workspace.',
+            );
+        }
+
+        $this->workspaceId = $workspaceId;
+
         $length = strlen(
             $idempotencyKey,
         );
@@ -144,6 +171,11 @@ final class OutboundMessage
     public function getId(): ?int
     {
         return $this->id;
+    }
+
+    public function getWorkspaceId(): ?int
+    {
+        return $this->workspaceId;
     }
 
     public function getIdempotencyKeyHash(): string

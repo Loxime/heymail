@@ -47,14 +47,14 @@ final readonly class TransactionalMailController
     public function send(
         Request $request,
     ): JsonResponse {
-        $apiKeyFingerprint =
+        $principal =
             $this
                 ->credentials
-                ->authorizedKeyFingerprint(
+                ->authorizedPrincipal(
                     $request,
                 );
 
-        if ($apiKeyFingerprint === null) {
+        if ($principal === null) {
             return self::unauthorized();
         }
 
@@ -62,7 +62,7 @@ final readonly class TransactionalMailController
             $this
                 ->sendQuotaLimiter
                 ->consume(
-                    $apiKeyFingerprint,
+                    $principal->keyFingerprint,
                 );
 
         if ($retryAfter !== null) {
@@ -160,6 +160,7 @@ final readonly class TransactionalMailController
                 ->senderAuthorization
                 ->authorizes(
                     $payload->from,
+                    $principal->workspaceId,
                 )
         ) {
             return self::error(
@@ -174,6 +175,7 @@ final readonly class TransactionalMailController
                 $this->submissionService->submit(
                     $idempotencyKey,
                     $payload,
+                    $principal->workspaceId,
                 );
         } catch (IdempotencyConflictException) {
             return self::error(

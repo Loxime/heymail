@@ -19,7 +19,14 @@ final readonly class SenderIdentityRegistrationService
 
     public function register(
         string $rawEmail,
+        int $workspaceId,
     ): SenderIdentityRegistration {
+        if ($workspaceId < 1) {
+            throw new \InvalidArgumentException(
+                'Invalid workspace.',
+            );
+        }
+
         $email =
             new SenderEmailAddress(
                 $rawEmail,
@@ -65,6 +72,21 @@ SQL,
                 $existing
                 instanceof SenderIdentity
             ) {
+                $existingWorkspaceId =
+                    $existing
+                        ->getSendingDomain()
+                        ->getWorkspaceId();
+
+                if (
+                    $existingWorkspaceId !== null
+                    && $existingWorkspaceId
+                        !== $workspaceId
+                ) {
+                    throw new SenderDomainNotVerifiedException(
+                        'Sender domain is not verified.',
+                    );
+                }
+
                 $connection
                     ->commit();
 
@@ -88,6 +110,11 @@ SQL,
             if (
                 !$domain
                 instanceof SendingDomain
+                || (
+                    $domain->getWorkspaceId() !== null
+                    && $domain->getWorkspaceId()
+                        !== $workspaceId
+                )
                 || $domain->getStatus()
                     !== SendingDomainStatus::VERIFIED
             ) {

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Api;
 
+use App\Workspace\LegacyApiWorkspace;
 use RuntimeException;
 use Symfony\Component\HttpFoundation\Request;
 
@@ -15,6 +16,7 @@ final class ApiCredentials
     public function __construct(
         string $apiKeyFile,
         string $apiSecretFile,
+        private readonly ?LegacyApiWorkspace $legacyApiWorkspace = null,
     ) {
         $this->apiKey = self::readSecret(
             $apiKeyFile,
@@ -56,6 +58,31 @@ final class ApiCredentials
             ->authorizedKeyFingerprint(
                 $request,
             ) !== null;
+    }
+
+    public function authorizedPrincipal(
+        Request $request,
+    ): ?ApiPrincipal {
+        $fingerprint =
+            $this->authorizedKeyFingerprint(
+                $request,
+            );
+
+        if ($fingerprint === null) {
+            return null;
+        }
+
+        if ($this->legacyApiWorkspace === null) {
+            throw new RuntimeException(
+                'API workspace resolver is unavailable.',
+            );
+        }
+
+        return new ApiPrincipal(
+            keyFingerprint: $fingerprint,
+            workspaceId:
+                $this->legacyApiWorkspace->id(),
+        );
     }
 
     public function authorizedKeyFingerprint(

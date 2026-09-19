@@ -40,11 +40,14 @@ final readonly class SendingDomainController
     public function create(
         Request $request,
     ): JsonResponse {
-        if (
-            !$this->credentials->authorizes(
-                $request,
-            )
-        ) {
+        $principal =
+            $this
+                ->credentials
+                ->authorizedPrincipal(
+                    $request,
+                );
+
+        if ($principal === null) {
             return self::unauthorized();
         }
 
@@ -111,6 +114,7 @@ final readonly class SendingDomainController
                     ->registrationService
                     ->register(
                         $decoded['domain'],
+                        $principal->workspaceId,
                     );
         } catch (InvalidArgumentException $exception) {
             return self::error(

@@ -37,11 +37,14 @@ final readonly class SenderIdentityController
     public function create(
         Request $request,
     ): JsonResponse {
-        if (
-            !$this->credentials->authorizes(
-                $request,
-            )
-        ) {
+        $principal =
+            $this
+                ->credentials
+                ->authorizedPrincipal(
+                    $request,
+                );
+
+        if ($principal === null) {
             return self::unauthorized();
         }
 
@@ -108,6 +111,7 @@ final readonly class SenderIdentityController
                     ->registrationService
                     ->register(
                         $decoded['email'],
+                        $principal->workspaceId,
                     );
         } catch (SenderDomainNotVerifiedException) {
             return self::error(

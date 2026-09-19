@@ -24,9 +24,17 @@ final readonly class OutboundMessageSubmissionService
     public function submit(
         string $idempotencyKey,
         OutboundEmailPayload $payload,
+        int $workspaceId,
     ): OutboundMessageSubmission {
+        if ($workspaceId < 1) {
+            throw new \InvalidArgumentException(
+                'Invalid workspace.',
+            );
+        }
+
         $candidate = new OutboundMessage(
-            $idempotencyKey,
+            idempotencyKey: $idempotencyKey,
+            workspaceId: $workspaceId,
         );
 
         $idempotencyHash =
@@ -64,6 +72,16 @@ SQL,
                 $existing
                 instanceof OutboundMessage
             ) {
+                if (
+                    $existing->getWorkspaceId() !== null
+                    && $existing->getWorkspaceId()
+                        !== $workspaceId
+                ) {
+                    throw new IdempotencyConflictException(
+                        'Idempotency key belongs to another workspace.',
+                    );
+                }
+
                 $existingId =
                     $existing->getId();
 
