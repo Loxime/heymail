@@ -11,6 +11,7 @@ import {
   Settings,
   UserRound,
   UserRoundCheck,
+  Users,
   Webhook,
 } from 'lucide-react'
 import {
@@ -63,6 +64,11 @@ const groups = [
         to: '/templates',
         label: 'Templates',
         icon: FileText,
+      },
+      {
+        to: '/contacts',
+        label: 'Contacts',
+        icon: Users,
       },
     ],
   },

@@ -261,6 +261,58 @@ export interface ConsoleEmailTemplateRenderResponse {
   html: string | null
 }
 
+export type ConsoleContactCustomFieldValue =
+  | string
+  | number
+  | boolean
+  | null
+
+export interface ConsoleContact {
+  id: number
+  email: string
+  name: string | null
+  customFields: Record<
+    string,
+    ConsoleContactCustomFieldValue
+  >
+  tags: string[]
+  listIds: number[]
+  createdAt: string
+  updatedAt: string
+}
+
+export interface ConsoleContactListResponse {
+  items: ConsoleContact[]
+}
+
+export interface ConsoleContactListResponseItem {
+  id: number
+  name: string
+  contactCount: number
+  createdAt: string
+  updatedAt: string
+}
+
+export interface ConsoleContactListListResponse {
+  items: ConsoleContactListResponseItem[]
+}
+
+export interface ConsoleContactTag {
+  id: number
+  name: string
+  contactCount: number
+  createdAt: string
+}
+
+export interface ConsoleContactTagListResponse {
+  items: ConsoleContactTag[]
+}
+
+export interface ConsoleContactImportResponse {
+  rows: number
+  created: number
+  updated: number
+}
 export interface ConsoleProfileResponse {
   user: ConsoleUser
   stats: {

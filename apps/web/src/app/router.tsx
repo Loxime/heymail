@@ -47,6 +47,9 @@ import {
 import {
   TemplatesPage,
 } from '../features/templates/TemplatesPage'
+import {
+  ContactsPage,
+} from '../features/contacts/ContactsPage'
 
 export const router =
   createBrowserRouter([
@@ -77,6 +80,10 @@ export const router =
         {
           path: 'templates',
           element: <TemplatesPage />,
+        },
+        {
+          path: 'contacts',
+          element: <ContactsPage />,
         },
         {
           path: 'domains',

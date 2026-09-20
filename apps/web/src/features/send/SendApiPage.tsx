@@ -29,6 +29,7 @@ import {
 import type {
   ConsoleEmailTemplateListResponse,
   ConsoleEmailTemplateRenderResponse,
+  ConsoleContactListResponse,
   EmailAddressPayload,
   SenderIdentityListResponse,
   SendMessagePayload,
@@ -82,6 +83,18 @@ export function SendApiPage() {
     },
   ])
 
+  const [
+    selectedContactId,
+    setSelectedContactId,
+  ] = useState<number | null>(() => {
+    const raw = searchParams.get('contact')
+
+    return raw !== null
+      && /^[1-9][0-9]*$/.test(raw)
+      ? Number(raw)
+      : null
+  })
+
   const senders = useQuery({
     queryKey: ['senders'],
     queryFn: () =>
@@ -95,6 +108,14 @@ export function SendApiPage() {
     queryFn: () =>
       apiGet<ConsoleEmailTemplateListResponse>(
         '/console/templates',
+      ),
+  })
+
+  const savedContacts = useQuery({
+    queryKey: ['console-contacts-send'],
+    queryFn: () =>
+      apiGet<ConsoleContactListResponse>(
+        '/console/contacts?limit=100',
       ),
   })
 
@@ -318,6 +339,59 @@ export function SendApiPage() {
     )
   }
 
+  const addSavedContact = (
+    contactId: number,
+  ) => {
+    const contact =
+      savedContacts.data?.items.find(
+        (item) =>
+          item.id === contactId,
+      )
+
+    if (!contact) {
+      return
+    }
+
+    setRecipients(
+      (current) => {
+        if (
+          current.some(
+            (recipient) =>
+              recipient.email.trim()
+                .toLowerCase()
+              === contact.email.toLowerCase(),
+          )
+        ) {
+          return current
+        }
+
+        const recipient = {
+          email: contact.email,
+          name: contact.name ?? '',
+        }
+
+        if (
+          current.length === 1
+          && current[0].email.trim() === ''
+          && current[0].name.trim() === ''
+        ) {
+          return [recipient]
+        }
+
+        if (current.length >= 50) {
+          return current
+        }
+
+        return [
+          ...current,
+          recipient,
+        ]
+      },
+    )
+
+    setSelectedContactId(null)
+  }
+
   const removeRecipient = (
     index: number,
   ) => {
@@ -333,6 +407,23 @@ export function SendApiPage() {
         ),
     )
   }
+
+  useEffect(
+    () => {
+      if (
+        selectedContactId !== null
+        && savedContacts.data
+      ) {
+        addSavedContact(
+          selectedContactId,
+        )
+      }
+    },
+    [
+      savedContacts.data,
+      selectedContactId,
+    ],
+  )
 
   return (
     <div className="page">
@@ -477,6 +568,48 @@ export function SendApiPage() {
                   <Plus size={13} />
                   Add recipient
                 </button>
+              </div>
+
+              <div className="send-contact-picker">
+                <select
+                  onChange={(event) =>
+                    setSelectedContactId(
+                      event.target.value === ''
+                        ? null
+                        : Number(
+                            event.target.value,
+                          ),
+                    )
+                  }
+                  value={
+                    selectedContactId
+                    ?? ''
+                  }
+                >
+                  <option value="">
+                    Add saved contact…
+                  </option>
+
+                  {savedContacts.data?.items.map(
+                    (contact) => (
+                      <option
+                        key={contact.id}
+                        value={contact.id}
+                      >
+                        {contact.name
+                          ? `${contact.name} <${contact.email}>`
+                          : contact.email}
+                      </option>
+                    ),
+                  )}
+                </select>
+
+                <Link
+                  className="button button--secondary"
+                  to="/contacts"
+                >
+                  Manage contacts
+                </Link>
               </div>
 
               <div className="recipient-list">

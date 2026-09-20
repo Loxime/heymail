@@ -126,6 +126,23 @@ export function apiPost<T>(
   )
 }
 
+export function apiPostText<T>(
+  path: string,
+  body: string,
+  contentType: string,
+): Promise<T> {
+  return request<T>(
+    path,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': contentType,
+      },
+      body,
+    },
+  )
+}
+
 export function apiPatch<T>(
   path: string,
   body: unknown,
