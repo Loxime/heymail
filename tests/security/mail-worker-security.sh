@@ -147,7 +147,93 @@ WORKER_CONTAINER="$(
 [ -n "$WORKER_CONTAINER" ] \
     || fail "mail-worker container does not exist"
 
-sleep 5
+POSTFIX_CONTAINER="$(
+    docker compose ps -q postfix
+)"
+
+[ -n "$POSTFIX_CONTAINER" ] \
+    || fail "Postfix container does not exist"
+
+POSTFIX_READY="false"
+
+for _ in $(seq 1 60)
+do
+    if docker compose exec -T mail-worker \
+        php -r '
+            $errno = 0;
+            $error = "";
+
+            $socket = @fsockopen(
+                "postfix-mail",
+                10025,
+                $errno,
+                $error,
+                1.0,
+            );
+
+            if (!is_resource($socket)) {
+                exit(1);
+            }
+
+            stream_set_timeout(
+                $socket,
+                1,
+            );
+
+            $banner = fgets(
+                $socket,
+            );
+
+            fclose(
+                $socket,
+            );
+
+            if (
+                !is_string($banner)
+                || !str_starts_with(
+                    $banner,
+                    "220 ",
+                )
+            ) {
+                exit(1);
+            }
+        ' \
+        >/dev/null 2>&1
+    then
+        POSTFIX_READY="true"
+        break
+    fi
+
+    POSTFIX_HEALTH="$(
+        docker inspect "$POSTFIX_CONTAINER" \
+            --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}'
+    )"
+
+    if [ "$POSTFIX_HEALTH" = "unhealthy" ]; then
+        docker compose logs \
+            --tail=100 \
+            postfix \
+            >&2 \
+            || true
+
+        fail "Postfix became unhealthy before submission listener was ready"
+    fi
+
+    sleep 1
+done
+
+[ "$POSTFIX_READY" = "true" ] \
+    || {
+        docker compose logs \
+            --tail=100 \
+            postfix \
+            >&2 \
+            || true
+
+        fail "Postfix submission listener did not become ready"
+    }
+
+pass "Postfix submission listener became ready"
 
 RUNNING="$(
     docker inspect "$WORKER_CONTAINER" \

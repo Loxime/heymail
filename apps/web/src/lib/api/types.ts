@@ -202,6 +202,25 @@ export interface ConsoleFavoriteContact {
   createdAt: string
 }
 
+export interface ConsoleApiCredential {
+  id: number
+  apiKey: string
+  fingerprint: string
+  label: string
+  createdAt: string
+  lastUsedAt: string | null
+  revokedAt: string | null
+}
+
+export interface ConsoleApiCredentialListResponse {
+  items: ConsoleApiCredential[]
+}
+
+export interface ConsoleApiCredentialSecretResponse {
+  credential: ConsoleApiCredential
+  secret: string
+}
+
 export interface ConsoleProfileResponse {
   user: ConsoleUser
   stats: {

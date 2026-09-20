@@ -16,7 +16,7 @@ final readonly class OutboundMessageSubmissionService
 {
     public function __construct(
         private EntityManagerInterface $entityManager,
-        private OutboundEmailPayloadCipher $payloadCipher,
+        private OutboundMessagePayloadCryptor $payloadCryptor,
         private MessageBusInterface $messageBus,
     ) {
     }
@@ -112,8 +112,8 @@ SQL,
                 }
 
                 $existingPayload =
-                    $this->payloadCipher->decrypt(
-                        $idempotencyHash,
+                    $this->payloadCryptor->decrypt(
+                        $existing,
                         $storedPayload
                             ->encryptedPayload(),
                     );
@@ -137,8 +137,8 @@ SQL,
             }
 
             $encrypted =
-                $this->payloadCipher->encrypt(
-                    $idempotencyHash,
+                $this->payloadCryptor->encrypt(
+                    $candidate,
                     $payload,
                 );
 

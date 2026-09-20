@@ -10,6 +10,7 @@ use App\Enum\OutboundMessageStatus;
 use App\Mail\EmailAddress;
 use App\Mail\OutboundEmailPayload;
 use App\Mail\OutboundEmailPayloadCipher;
+use App\Mail\OutboundMessagePayloadCryptor;
 use App\Mail\OutboundMessageSubmitter;
 use App\Message\SendOutboundEmail;
 use App\MessageHandler\SendOutboundEmailHandler;
@@ -137,7 +138,7 @@ final class SendOutboundEmailHandlerTest
 
         $handler = new SendOutboundEmailHandler(
             $entityManager,
-            $this->cipher(),
+            $this->cryptor(),
             $submitter,
         );
 
@@ -196,7 +197,7 @@ final class SendOutboundEmailHandlerTest
 
         $handler = new SendOutboundEmailHandler(
             $entityManager,
-            $this->cipher(),
+            $this->cryptor(),
             $submitter,
         );
 
@@ -221,7 +222,7 @@ final class SendOutboundEmailHandlerTest
 
         $handler = new SendOutboundEmailHandler(
             $entityManager,
-            $this->cipher(),
+            $this->cryptor(),
             $submitter,
         );
 
@@ -278,7 +279,7 @@ final class SendOutboundEmailHandlerTest
 
         $handler = new SendOutboundEmailHandler(
             $entityManager,
-            $this->cipher(),
+            $this->cryptor(),
             $submitter,
         );
 
@@ -330,6 +331,13 @@ final class SendOutboundEmailHandlerTest
                 $encrypted,
             ),
         ];
+    }
+
+    private function cryptor(): OutboundMessagePayloadCryptor
+    {
+        return new OutboundMessagePayloadCryptor(
+            $this->cipher(),
+        );
     }
 
     private function cipher(): OutboundEmailPayloadCipher

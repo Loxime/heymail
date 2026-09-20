@@ -7,7 +7,7 @@ namespace App\MessageHandler;
 use App\Entity\OutboundMessage;
 use App\Entity\OutboundMessagePayload;
 use App\Enum\OutboundMessageStatus;
-use App\Mail\OutboundEmailPayloadCipher;
+use App\Mail\OutboundMessagePayloadCryptor;
 use App\Mail\OutboundMessageSubmitter;
 use App\Message\SendOutboundEmail;
 use Doctrine\ORM\EntityManagerInterface;
@@ -24,7 +24,7 @@ final readonly class SendOutboundEmailHandler
 {
     public function __construct(
         private EntityManagerInterface $entityManager,
-        private OutboundEmailPayloadCipher $payloadCipher,
+        private OutboundMessagePayloadCryptor $payloadCryptor,
         private OutboundMessageSubmitter $submitter,
     ) {
     }
@@ -105,9 +105,8 @@ final readonly class SendOutboundEmailHandler
 
         try {
             $payload =
-                $this->payloadCipher->decrypt(
-                    $outboundMessage
-                        ->getIdempotencyKeyHash(),
+                $this->payloadCryptor->decrypt(
+                    $outboundMessage,
                     $storedPayload
                         ->encryptedPayload(),
                 );

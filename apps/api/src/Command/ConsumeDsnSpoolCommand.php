@@ -8,7 +8,7 @@ use App\Entity\OutboundMessage;
 use App\Entity\OutboundMessageEvent;
 use App\Entity\OutboundMessagePayload;
 use App\Mail\DsnSpoolEvent;
-use App\Mail\OutboundEmailPayloadCipher;
+use App\Mail\OutboundMessagePayloadCryptor;
 use Doctrine\ORM\EntityManagerInterface;
 use InvalidArgumentException;
 use LogicException;
@@ -28,7 +28,7 @@ final class ConsumeDsnSpoolCommand extends Command
 {
     public function __construct(
         private readonly EntityManagerInterface $entityManager,
-        private readonly OutboundEmailPayloadCipher $payloadCipher,
+        private readonly OutboundMessagePayloadCryptor $payloadCryptor,
     ) {
         parent::__construct();
     }
@@ -340,10 +340,9 @@ final class ConsumeDsnSpoolCommand extends Command
 
             try {
                 $payload = $this
-                    ->payloadCipher
+                    ->payloadCryptor
                     ->decrypt(
-                        $message
-                            ->getIdempotencyKeyHash(),
+                        $message,
                         $storedPayload
                             ->encryptedPayload(),
                     );
