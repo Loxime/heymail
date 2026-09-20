@@ -313,6 +313,45 @@ export interface ConsoleContactImportResponse {
   created: number
   updated: number
 }
+
+export type ConsoleCampaignStatus =
+  | 'draft'
+  | 'scheduled'
+  | 'ready'
+  | 'processing'
+  | 'paused'
+  | 'completed'
+  | 'cancelled'
+
+export interface ConsoleCampaign {
+  id: number
+  name: string
+  senderId: number | null
+  templateId: number | null
+  listId: number | null
+  status: ConsoleCampaignStatus
+  scheduledFor: string | null
+  snapshotAt: string | null
+  templateVersion: number | null
+  recipientCount: number
+  processedCount: number
+  pausedAt: string | null
+  completedAt: string | null
+  lastError: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface ConsoleCampaignListResponse {
+  items: ConsoleCampaign[]
+}
+
+export interface ConsoleCampaignPreviewResponse {
+  subject: string
+  text: string | null
+  html: string | null
+}
+
 export interface ConsoleProfileResponse {
   user: ConsoleUser
   stats: {

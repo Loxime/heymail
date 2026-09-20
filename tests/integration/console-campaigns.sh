@@ -131,7 +131,17 @@ foreach([['ada','Ada Lovelace','Analytical Engines'],['grace','Grace Hopper','Na
  $cid=(int)$c->fetchOne(
   "INSERT INTO contact(workspace_id,email,name,custom_fields,created_at,updated_at)
    VALUES(:w,:e,:n,CAST(:f AS jsonb),:t,:t) RETURNING id",
-  ['w'=>$wa,'e'=>"$local-$m@example.test",'n'=>$name,'f'=>json_encode(['company'=>$company],JSON_THROW_ON_ERROR),'t'=>$now->format('Y-m-d H:i:s')]
+  ['w'=>$wa,'e'=>"$local-$m@example.test",'n'=>$name,'f'=>json_encode(
+    $local === 'ada'
+      ? [
+          'company'=>$company,
+          'first_name'=>'Mallory',
+          'email'=>'attacker@example.test',
+          'name'=>'Override Name',
+        ]
+      : ['company'=>$company],
+    JSON_THROW_ON_ERROR
+  ),'t'=>$now->format('Y-m-d H:i:s')]
  );
  $c->insert('contact_list_member',['workspace_id'=>$wa,'list_id'=>$list,'contact_id'=>$cid,'created_at'=>$now->format('Y-m-d H:i:s')]);
 }
@@ -204,14 +214,18 @@ $x=(new CampaignSnapshotCipher((string)getenv('PAYLOAD_KEK_FILE')))->decrypt(
 echo "COUNT=",count($x['recipients']),"\n";
 echo "SUBJECT=",$x['template']['subject'],"\n";
 echo "FIRST=",$x['recipients'][0]['variables']['first_name'],"\n";
+echo "EMAIL=",$x['recipients'][0]['email'],"\n";
+echo "NAME=",$x['recipients'][0]['name'],"\n";
 echo "COMPANY=",$x['recipients'][0]['variables']['company'],"\n";
 PHP
 )"
 grep -Fq 'COUNT=2' <<<"$ASSERT"
 grep -Fq 'SUBJECT=Hello {{first_name}}' <<<"$ASSERT"
 grep -Fq 'FIRST=Ada' <<<"$ASSERT"
+grep -Fq "EMAIL=ada-$MARKER@example.test" <<<"$ASSERT"
+grep -Fq 'NAME=Ada Lovelace' <<<"$ASSERT"
 grep -Fq 'COMPANY=Analytical Engines' <<<"$ASSERT"
-echo "PASS: campaign snapshot is encrypted at rest"
+echo "PASS: campaign snapshot is encrypted at rest and reserved contact variables cannot be overridden"
 
 MUTATE="$(
 docker compose exec -T -e TID="$TEMPLATE_ID" -e WID="$WORKSPACE_A" -e MARKER="$MARKER" api php <<'PHP'

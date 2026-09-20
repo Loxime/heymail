@@ -40,7 +40,7 @@ final readonly class ConsoleCampaignController
         }
 
         $rows = $this->connection->fetchAllAssociative(
-            'SELECT id,name,sender_identity_id,template_id,source_list_id,status,scheduled_for,snapshot_at,template_version,recipient_count,created_at,updated_at
+            'SELECT id,name,sender_identity_id,template_id,source_list_id,status,scheduled_for,snapshot_at,template_version,recipient_count,processed_count,paused_at,completed_at,last_error,created_at,updated_at
              FROM campaign WHERE workspace_id = :workspace_id ORDER BY id DESC',
             ['workspace_id' => $workspaceId],
         );
@@ -235,10 +235,10 @@ final readonly class ConsoleCampaignController
                 $custom = self::decodeObject($contact['custom_fields'] ?? '{}');
                 $name = $contact['name'] === null ? null : (string) $contact['name'];
                 $values = [
+                    ...$custom,
                     'email' => (string) $contact['email'],
                     'name' => $name ?? '',
                     'first_name' => self::firstName($name),
-                    ...$custom,
                 ];
                 $selected = [];
 
@@ -326,7 +326,7 @@ final readonly class ConsoleCampaignController
             "UPDATE campaign
              SET status = 'cancelled', updated_at = :updated_at
              WHERE id = :id AND workspace_id = :workspace_id
-               AND status IN ('draft','scheduled','ready')",
+               AND status IN ('draft','scheduled','ready','processing','paused')",
             [
                 'updated_at' => self::now()->format('Y-m-d H:i:s'),
                 'id' => $campaignId,
@@ -375,7 +375,7 @@ final readonly class ConsoleCampaignController
     private function campaign(int $workspaceId, int $campaignId): array
     {
         $row = $this->connection->fetchAssociative(
-            'SELECT id,name,sender_identity_id,template_id,source_list_id,status,scheduled_for,snapshot_at,template_version,recipient_count,created_at,updated_at
+            'SELECT id,name,sender_identity_id,template_id,source_list_id,status,scheduled_for,snapshot_at,template_version,recipient_count,processed_count,paused_at,completed_at,last_error,created_at,updated_at
              FROM campaign WHERE id = :id AND workspace_id = :workspace_id',
             ['id' => $campaignId, 'workspace_id' => $workspaceId],
         );
@@ -401,6 +401,16 @@ final readonly class ConsoleCampaignController
             'snapshotAt' => $row['snapshot_at'] === null ? null : self::timestamp($row['snapshot_at']),
             'templateVersion' => $row['template_version'] === null ? null : (int) $row['template_version'],
             'recipientCount' => (int) $row['recipient_count'],
+            'processedCount' => (int) ($row['processed_count'] ?? 0),
+            'pausedAt' => isset($row['paused_at']) && $row['paused_at'] !== null
+                ? self::timestamp($row['paused_at'])
+                : null,
+            'completedAt' => isset($row['completed_at']) && $row['completed_at'] !== null
+                ? self::timestamp($row['completed_at'])
+                : null,
+            'lastError' => isset($row['last_error']) && $row['last_error'] !== null
+                ? (string) $row['last_error']
+                : null,
             'createdAt' => self::timestamp($row['created_at']),
             'updatedAt' => self::timestamp($row['updated_at']),
         ];

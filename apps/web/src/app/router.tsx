@@ -50,6 +50,9 @@ import {
 import {
   ContactsPage,
 } from '../features/contacts/ContactsPage'
+import {
+  CampaignsPage,
+} from '../features/campaigns/CampaignsPage'
 
 export const router =
   createBrowserRouter([
@@ -84,6 +87,10 @@ export const router =
         {
           path: 'contacts',
           element: <ContactsPage />,
+        },
+        {
+          path: 'campaigns',
+          element: <CampaignsPage />,
         },
         {
           path: 'domains',
