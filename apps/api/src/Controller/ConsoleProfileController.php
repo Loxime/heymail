@@ -405,9 +405,20 @@ final readonly class ConsoleProfileController
             }
         }
 
+        $workspaceId = $this->workspaceIdForUser(
+            $user['id'],
+        );
+
+        $now = self::now()
+            ->format('Y-m-d H:i:s');
+
         $this->connection
-            ->executeStatement(
-                <<<'SQL'
+            ->beginTransaction();
+
+        try {
+            $favoriteId = filter_var(
+                $this->connection->fetchOne(
+                    <<<'SQL'
 INSERT INTO console_favorite_contact (
     user_id,
     email,
@@ -422,15 +433,82 @@ VALUES (
 )
 ON CONFLICT (user_id, email)
 DO UPDATE SET name = EXCLUDED.name
+RETURNING id
 SQL,
+                    [
+                        'user_id' => $user['id'],
+                        'email' => $email,
+                        'name' => $name,
+                        'created_at' => $now,
+                    ],
+                ),
+                FILTER_VALIDATE_INT,
                 [
-                    'user_id' => $user['id'],
-                    'email' => $email,
-                    'name' => $name,
-                    'created_at' => self::now()
-                        ->format('Y-m-d H:i:s'),
+                    'options' => [
+                        'min_range' => 1,
+                    ],
                 ],
             );
+
+            if (!is_int($favoriteId)) {
+                throw new \RuntimeException(
+                    'Favorite contact identifier is invalid.',
+                );
+            }
+
+            $this->connection
+                ->executeStatement(
+                    <<<'SQL'
+INSERT INTO contact (
+    workspace_id,
+    legacy_favorite_id,
+    email,
+    name,
+    custom_fields,
+    created_at,
+    updated_at
+)
+VALUES (
+    :workspace_id,
+    :legacy_favorite_id,
+    :email,
+    :name,
+    '{}'::jsonb,
+    :created_at,
+    :updated_at
+)
+ON CONFLICT (workspace_id, email)
+DO UPDATE SET
+    legacy_favorite_id = COALESCE(
+        contact.legacy_favorite_id,
+        EXCLUDED.legacy_favorite_id
+    ),
+    name = EXCLUDED.name,
+    updated_at = EXCLUDED.updated_at
+SQL,
+                    [
+                        'workspace_id' => $workspaceId,
+                        'legacy_favorite_id' => $favoriteId,
+                        'email' => $email,
+                        'name' => $name,
+                        'created_at' => $now,
+                        'updated_at' => $now,
+                    ],
+                );
+
+            $this->connection
+                ->commit();
+        } catch (\Throwable $exception) {
+            if (
+                $this->connection
+                    ->isTransactionActive()
+            ) {
+                $this->connection
+                    ->rollBack();
+            }
+
+            throw $exception;
+        }
 
         return new JsonResponse([
             'items' => $this->favoriteRows(
