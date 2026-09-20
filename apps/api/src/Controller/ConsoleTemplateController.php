@@ -277,6 +277,254 @@ SQL,
         );
     }
 
+    #[Route('/{id}/duplicate', name: 'console_templates_duplicate', requirements: ['id' => '[1-9][0-9]*'], methods: ['POST'])]
+    public function duplicate(Request $request, string $id): JsonResponse
+    {
+        $workspaceId = $this->workspaceId($request);
+
+        if ($workspaceId instanceof JsonResponse) {
+            return $workspaceId;
+        }
+
+        $templateId = self::positiveId($id);
+
+        if ($templateId === null) {
+            return self::notFound();
+        }
+
+        $source = $this->connection->fetchAssociative(
+            <<<'SQL'
+SELECT
+    t.name,
+    v.subject,
+    v.text_body,
+    v.html_body
+FROM email_template t
+INNER JOIN LATERAL (
+    SELECT
+        subject,
+        text_body,
+        html_body
+    FROM email_template_version
+    WHERE template_id = t.id
+    ORDER BY version DESC
+    LIMIT 1
+) v ON TRUE
+WHERE t.id = :id
+  AND t.workspace_id = :workspace_id
+SQL,
+            [
+                'id' => $templateId,
+                'workspace_id' => $workspaceId,
+            ],
+        );
+
+        if ($source === false) {
+            return self::notFound();
+        }
+
+        $baseName = rtrim(
+            substr((string) $source['name'], 0, 145),
+        ) . ' copy';
+
+        for ($attempt = 1; $attempt <= 99; ++$attempt) {
+            $name = $baseName
+                . ($attempt === 1 ? '' : ' ' . $attempt);
+
+            $this->connection->beginTransaction();
+
+            try {
+                $now = self::now()->format('Y-m-d H:i:s');
+
+                $newId = self::positiveId(
+                    $this->connection->fetchOne(
+                        <<<'SQL'
+INSERT INTO email_template (
+    workspace_id,
+    name,
+    created_at,
+    updated_at
+)
+VALUES (
+    :workspace_id,
+    :name,
+    :created_at,
+    :updated_at
+)
+RETURNING id
+SQL,
+                        [
+                            'workspace_id' => $workspaceId,
+                            'name' => $name,
+                            'created_at' => $now,
+                            'updated_at' => $now,
+                        ],
+                    ),
+                );
+
+                if ($newId === null) {
+                    throw new RuntimeException(
+                        'Duplicated template identifier is invalid.',
+                    );
+                }
+
+                $this->connection->insert(
+                    'email_template_version',
+                    [
+                        'template_id' => $newId,
+                        'version' => 1,
+                        'subject' => (string) $source['subject'],
+                        'text_body' => $source['text_body'],
+                        'html_body' => $source['html_body'],
+                        'created_at' => $now,
+                    ],
+                );
+
+                $this->connection->commit();
+
+                return new JsonResponse(
+                    $this->templateById($workspaceId, $newId),
+                    Response::HTTP_CREATED,
+                );
+            } catch (UniqueConstraintViolationException) {
+                if ($this->connection->isTransactionActive()) {
+                    $this->connection->rollBack();
+                }
+            } catch (\Throwable $exception) {
+                if ($this->connection->isTransactionActive()) {
+                    $this->connection->rollBack();
+                }
+
+                throw $exception;
+            }
+        }
+
+        return self::error(
+            'template_conflict',
+            'Unable to allocate a unique duplicate template name.',
+            Response::HTTP_CONFLICT,
+        );
+    }
+
+    #[Route('/{id}/render', name: 'console_templates_render', requirements: ['id' => '[1-9][0-9]*'], methods: ['POST'])]
+    public function render(Request $request, string $id): JsonResponse
+    {
+        $workspaceId = $this->workspaceId($request);
+
+        if ($workspaceId instanceof JsonResponse) {
+            return $workspaceId;
+        }
+
+        $templateId = self::positiveId($id);
+
+        if ($templateId === null) {
+            return self::notFound();
+        }
+
+        $payload = self::jsonObject($request);
+
+        if ($payload instanceof JsonResponse) {
+            return $payload;
+        }
+
+        if (array_keys($payload) !== ['variables']) {
+            return self::error(
+                'invalid_payload',
+                'Expected variables.',
+                Response::HTTP_UNPROCESSABLE_ENTITY,
+            );
+        }
+
+        $variables = $payload['variables'];
+
+        if (
+            !is_array($variables)
+            || ($variables !== [] && array_is_list($variables))
+        ) {
+            return self::error(
+                'invalid_payload',
+                'Template variables must be a JSON object.',
+                Response::HTTP_UNPROCESSABLE_ENTITY,
+            );
+        }
+
+        $row = $this->connection->fetchAssociative(
+            <<<'SQL'
+SELECT
+    t.name,
+    v.version,
+    v.subject,
+    v.text_body,
+    v.html_body
+FROM email_template t
+INNER JOIN LATERAL (
+    SELECT
+        version,
+        subject,
+        text_body,
+        html_body
+    FROM email_template_version
+    WHERE template_id = t.id
+    ORDER BY version DESC
+    LIMIT 1
+) v ON TRUE
+WHERE t.id = :id
+  AND t.workspace_id = :workspace_id
+SQL,
+            [
+                'id' => $templateId,
+                'workspace_id' => $workspaceId,
+            ],
+        );
+
+        if ($row === false) {
+            return self::notFound();
+        }
+
+        try {
+            $subject = $this->renderer->render(
+                (string) $row['subject'],
+                $variables,
+            );
+
+            $text = $row['text_body'] === null
+                ? null
+                : $this->renderer->render(
+                    (string) $row['text_body'],
+                    $variables,
+                );
+
+            $html = $row['html_body'] === null
+                ? null
+                : $this->renderer->render(
+                    (string) $row['html_body'],
+                    $variables,
+                );
+        } catch (InvalidArgumentException $exception) {
+            return self::error(
+                'invalid_template_variables',
+                $exception->getMessage(),
+                Response::HTTP_UNPROCESSABLE_ENTITY,
+            );
+        }
+
+        $response = new JsonResponse([
+            'templateId' => $templateId,
+            'name' => (string) $row['name'],
+            'version' => (int) $row['version'],
+            'subject' => $subject,
+            'text' => $text,
+            'html' => $html,
+        ]);
+
+        $response->headers->set(
+            'Cache-Control',
+            'no-store',
+        );
+
+        return $response;
+    }
+
     #[Route('/{id}/history', name: 'console_templates_history', requirements: ['id' => '[1-9][0-9]*'], methods: ['GET'])]
     public function history(Request $request, string $id): JsonResponse
     {

@@ -221,6 +221,46 @@ export interface ConsoleApiCredentialSecretResponse {
   secret: string
 }
 
+export interface ConsoleEmailTemplate {
+  id: number
+  name: string
+  version: number
+  subject: string
+  text: string | null
+  html: string | null
+  variables: string[]
+  createdAt: string
+  updatedAt: string
+  versionCreatedAt: string
+}
+
+export interface ConsoleEmailTemplateListResponse {
+  items: ConsoleEmailTemplate[]
+}
+
+export interface ConsoleEmailTemplateVersion {
+  id: number
+  version: number
+  subject: string
+  text: string | null
+  html: string | null
+  variables: string[]
+  createdAt: string
+}
+
+export interface ConsoleEmailTemplateHistoryResponse {
+  items: ConsoleEmailTemplateVersion[]
+}
+
+export interface ConsoleEmailTemplateRenderResponse {
+  templateId: number
+  name: string
+  version: number
+  subject: string
+  text: string | null
+  html: string | null
+}
+
 export interface ConsoleProfileResponse {
   user: ConsoleUser
   stats: {

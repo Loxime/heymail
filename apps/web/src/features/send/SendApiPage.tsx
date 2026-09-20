@@ -2,6 +2,7 @@ import {
   AlertTriangle,
   CheckCircle2,
   Code2,
+  FileText,
   Plus,
   RotateCcw,
   Send,
@@ -13,6 +14,7 @@ import {
 } from '@tanstack/react-query'
 import {
   Link,
+  useSearchParams,
 } from 'react-router-dom'
 import {
   useEffect,
@@ -25,6 +27,8 @@ import {
   apiPost,
 } from '../../lib/api/client'
 import type {
+  ConsoleEmailTemplateListResponse,
+  ConsoleEmailTemplateRenderResponse,
   EmailAddressPayload,
   SenderIdentityListResponse,
   SendMessagePayload,
@@ -41,43 +45,33 @@ function newIdempotencyKey(): string {
 }
 
 export function SendApiPage() {
-  const [
-    fromEmail,
-    setFromEmail,
-  ] = useState('')
+  const [searchParams] = useSearchParams()
 
+  const [fromEmail, setFromEmail] = useState('')
+  const [fromName, setFromName] = useState('')
+  const [replyTo, setReplyTo] = useState('')
+  const [subject, setSubject] = useState('')
+  const [textPart, setTextPart] = useState('')
+  const [htmlPart, setHtmlPart] = useState('')
   const [
-    fromName,
-    setFromName,
-  ] = useState('')
+    selectedTemplateId,
+    setSelectedTemplateId,
+  ] = useState<number | null>(() => {
+    const raw = searchParams.get('template')
 
+    return raw !== null
+      && /^[1-9][0-9]*$/.test(raw)
+      ? Number(raw)
+      : null
+  })
   const [
-    replyTo,
-    setReplyTo,
-  ] = useState('')
-
-  const [
-    subject,
-    setSubject,
-  ] = useState('')
-
-  const [
-    textPart,
-    setTextPart,
-  ] = useState('')
-
-  const [
-    htmlPart,
-    setHtmlPart,
-  ] = useState('')
-
+    templateVariables,
+    setTemplateVariables,
+  ] = useState<Record<string, string>>({})
   const [
     idempotencyKey,
     setIdempotencyKey,
-  ] = useState(
-    newIdempotencyKey,
-  )
-
+  ] = useState(newIdempotencyKey)
   const [
     recipients,
     setRecipients,
@@ -88,147 +82,196 @@ export function SendApiPage() {
     },
   ])
 
-  const senders =
-    useQuery({
-      queryKey: [
-        'senders',
-      ],
+  const senders = useQuery({
+    queryKey: ['senders'],
+    queryFn: () =>
+      apiGet<SenderIdentityListResponse>(
+        '/api/v1/senders',
+      ),
+  })
 
-      queryFn: () =>
-        apiGet<SenderIdentityListResponse>(
-          '/api/v1/senders',
-        ),
-    })
+  const templates = useQuery({
+    queryKey: ['console-templates'],
+    queryFn: () =>
+      apiGet<ConsoleEmailTemplateListResponse>(
+        '/console/templates',
+      ),
+  })
 
-  const authorizedSenders =
-    useMemo(
-      () =>
-        senders.data?.items.filter(
-          (sender) =>
-            sender.authorized,
-        )
-        ?? [],
-      [
-        senders.data,
-      ],
-    )
+  const authorizedSenders = useMemo(
+    () =>
+      senders.data?.items.filter(
+        (sender) => sender.authorized,
+      ) ?? [],
+    [senders.data],
+  )
 
-  useEffect(
-    () => {
-      if (
-        fromEmail === ''
-        && authorizedSenders.length > 0
-      ) {
-        setFromEmail(
-          authorizedSenders[0].email,
-        )
-      }
-    },
+  const selectedTemplate = useMemo(
+    () =>
+      templates.data?.items.find(
+        (template) =>
+          template.id === selectedTemplateId,
+      ) ?? null,
     [
-      authorizedSenders,
-      fromEmail,
+      selectedTemplateId,
+      templates.data,
     ],
   )
 
-  const payload =
-    useMemo<SendMessagePayload>(
-      () => {
-        const from:
-          EmailAddressPayload = {
-            email: fromEmail,
-          }
+  useEffect(() => {
+    if (
+      fromEmail === ''
+      && authorizedSenders.length > 0
+    ) {
+      setFromEmail(
+        authorizedSenders[0].email,
+      )
+    }
+  }, [
+    authorizedSenders,
+    fromEmail,
+  ])
 
-        if (
-          fromName.trim() !== ''
-        ) {
-          from.name =
-            fromName.trim()
-        }
+  useEffect(() => {
+    if (
+      selectedTemplateId !== null
+      && templates.data
+      && !selectedTemplate
+    ) {
+      setSelectedTemplateId(null)
+    }
+  }, [
+    selectedTemplate,
+    selectedTemplateId,
+    templates.data,
+  ])
 
-        const to =
-          recipients
-            .filter(
-              (recipient) =>
-                recipient.email.trim()
-                !== '',
-            )
-            .map(
-              (recipient) => {
-                const address:
-                  EmailAddressPayload = {
-                    email:
-                      recipient.email.trim(),
-                  }
+  useEffect(() => {
+    if (!selectedTemplate) {
+      setTemplateVariables({})
+      return
+    }
 
-                if (
-                  recipient.name.trim()
-                  !== ''
-                ) {
-                  address.name =
-                    recipient.name.trim()
-                }
-
-                return address
-              },
-            )
-
-        const result:
-          SendMessagePayload = {
-            from,
-            to,
-            subject,
-          }
-
-        if (textPart !== '') {
-          result.text =
-            textPart
-        }
-
-        if (htmlPart !== '') {
-          result.html =
-            htmlPart
-        }
-
-        if (
-          replyTo.trim() !== ''
-        ) {
-          result.replyTo = {
-            email:
-              replyTo.trim(),
-          }
-        }
-
-        return result
-      },
-      [
-        fromEmail,
-        fromName,
-        htmlPart,
-        recipients,
-        replyTo,
-        subject,
-        textPart,
-      ],
-    )
-
-  const mutation =
-    useMutation({
-      mutationFn: () =>
-        apiPost<SendMessageResponse>(
-          '/api/v1/send',
-          payload,
-          {
-            'Idempotency-Key':
-              idempotencyKey,
-          },
+    setTemplateVariables(
+      Object.fromEntries(
+        selectedTemplate.variables.map(
+          (variable) => [
+            variable,
+            '',
+          ],
         ),
+      ),
+    )
+  }, [selectedTemplate])
 
-      onSuccess: () => {
-        setIdempotencyKey(
-          newIdempotencyKey(),
+  const payload = useMemo<SendMessagePayload>(
+    () => {
+      const from: EmailAddressPayload = {
+        email: fromEmail,
+      }
+
+      if (fromName.trim() !== '') {
+        from.name = fromName.trim()
+      }
+
+      const to =
+        recipients
+          .filter(
+            (recipient) =>
+              recipient.email.trim() !== '',
+          )
+          .map(
+            (recipient) => {
+              const address: EmailAddressPayload = {
+                email:
+                  recipient.email.trim(),
+              }
+
+              if (
+                recipient.name.trim()
+                !== ''
+              ) {
+                address.name =
+                  recipient.name.trim()
+              }
+
+              return address
+            },
+          )
+
+      const result: SendMessagePayload = {
+        from,
+        to,
+        subject,
+      }
+
+      if (textPart !== '') {
+        result.text = textPart
+      }
+
+      if (htmlPart !== '') {
+        result.html = htmlPart
+      }
+
+      if (replyTo.trim() !== '') {
+        result.replyTo = {
+          email: replyTo.trim(),
+        }
+      }
+
+      return result
+    },
+    [
+      fromEmail,
+      fromName,
+      htmlPart,
+      recipients,
+      replyTo,
+      subject,
+      textPart,
+    ],
+  )
+
+  const mutation = useMutation({
+    mutationFn: () =>
+      apiPost<SendMessageResponse>(
+        '/api/v1/send',
+        payload,
+        {
+          'Idempotency-Key':
+            idempotencyKey,
+        },
+      ),
+
+    onSuccess: () => {
+      setIdempotencyKey(
+        newIdempotencyKey(),
+      )
+    },
+  })
+
+  const templateRender = useMutation({
+    mutationFn: () => {
+      if (!selectedTemplate) {
+        throw new Error(
+          'Select a template first.',
         )
-      },
-    })
+      }
+
+      return apiPost<ConsoleEmailTemplateRenderResponse>(
+        `/console/templates/${selectedTemplate.id}/render`,
+        {
+          variables:
+            templateVariables,
+        },
+      )
+    },
+    onSuccess: (rendered) => {
+      setSubject(rendered.subject)
+      setTextPart(rendered.text ?? '')
+      setHtmlPart(rendered.html ?? '')
+    },
+  })
 
   const valid =
     fromEmail !== ''
@@ -248,10 +291,7 @@ export function SendApiPage() {
     setRecipients(
       (current) =>
         current.map(
-          (
-            recipient,
-            recipientIndex,
-          ) =>
+          (recipient, recipientIndex) =>
             recipientIndex === index
               ? {
                   ...recipient,
@@ -263,9 +303,7 @@ export function SendApiPage() {
   }
 
   const addRecipient = () => {
-    if (
-      recipients.length >= 50
-    ) {
+    if (recipients.length >= 50) {
       return
     }
 
@@ -283,9 +321,7 @@ export function SendApiPage() {
   const removeRecipient = (
     index: number,
   ) => {
-    if (
-      recipients.length === 1
-    ) {
+    if (recipients.length === 1) {
       return
     }
 
@@ -371,9 +407,7 @@ export function SendApiPage() {
           <div className="send-form__body">
             <div className="send-form__two">
               <label className="field">
-                <span>
-                  From
-                </span>
+                <span>From</span>
 
                 <select
                   disabled={
@@ -408,9 +442,7 @@ export function SendApiPage() {
               </label>
 
               <label className="field">
-                <span>
-                  From name
-                </span>
+                <span>From name</span>
 
                 <input
                   maxLength={128}
@@ -428,10 +460,7 @@ export function SendApiPage() {
             <div className="send-section">
               <div className="send-section__heading">
                 <div>
-                  <strong>
-                    Recipients
-                  </strong>
-
+                  <strong>Recipients</strong>
                   <span>
                     {recipients.length}/50
                   </span>
@@ -452,10 +481,7 @@ export function SendApiPage() {
 
               <div className="recipient-list">
                 {recipients.map(
-                  (
-                    recipient,
-                    index,
-                  ) => (
+                  (recipient, index) => (
                     <div
                       className="recipient-row"
                       key={index}
@@ -490,8 +516,7 @@ export function SendApiPage() {
                         aria-label="Remove recipient"
                         className="recipient-remove"
                         disabled={
-                          recipients.length
-                          === 1
+                          recipients.length === 1
                         }
                         onClick={() =>
                           removeRecipient(index)
@@ -506,10 +531,119 @@ export function SendApiPage() {
               </div>
             </div>
 
+            <div className="send-section template-send-picker">
+              <div className="send-section__heading">
+                <div>
+                  <strong>Email template</strong>
+                  <span>Optional</span>
+                </div>
+
+                <Link
+                  className="button button--secondary"
+                  to="/templates"
+                >
+                  <FileText size={13} />
+                  Manage templates
+                </Link>
+              </div>
+
+              <label className="field">
+                <span>Template</span>
+
+                <select
+                  onChange={(event) =>
+                    setSelectedTemplateId(
+                      event.target.value === ''
+                        ? null
+                        : Number(
+                            event.target.value,
+                          ),
+                    )
+                  }
+                  value={
+                    selectedTemplateId
+                    ?? ''
+                  }
+                >
+                  <option value="">
+                    No template
+                  </option>
+
+                  {templates.data?.items.map(
+                    (template) => (
+                      <option
+                        key={template.id}
+                        value={template.id}
+                      >
+                        {template.name}
+                        {' '}
+                        (v{template.version})
+                      </option>
+                    ),
+                  )}
+                </select>
+              </label>
+
+              {selectedTemplate
+                && selectedTemplate.variables.length > 0 && (
+                  <div className="template-send-variables">
+                    {selectedTemplate.variables.map(
+                      (variable) => (
+                        <label
+                          className="field"
+                          key={variable}
+                        >
+                          <span>{variable}</span>
+
+                          <input
+                            onChange={(event) =>
+                              setTemplateVariables(
+                                (current) => ({
+                                  ...current,
+                                  [variable]:
+                                    event.target.value,
+                                }),
+                              )
+                            }
+                            value={
+                              templateVariables[variable]
+                              ?? ''
+                            }
+                          />
+                        </label>
+                      ),
+                    )}
+                  </div>
+                )}
+
+              {selectedTemplate && (
+                <button
+                  className="button button--secondary"
+                  disabled={
+                    templateRender.isPending
+                  }
+                  onClick={() =>
+                    templateRender.mutate()
+                  }
+                  type="button"
+                >
+                  <FileText size={13} />
+                  Apply rendered template
+                </button>
+              )}
+
+              {templateRender.error
+                instanceof Error && (
+                  <div className="inline-error">
+                    {
+                      templateRender.error.message
+                    }
+                  </div>
+                )}
+            </div>
+
             <label className="field">
-              <span>
-                Reply-To
-              </span>
+              <span>Reply-To</span>
 
               <input
                 onChange={(event) =>
@@ -524,9 +658,7 @@ export function SendApiPage() {
             </label>
 
             <label className="field">
-              <span>
-                Subject
-              </span>
+              <span>Subject</span>
 
               <input
                 maxLength={255}
@@ -542,9 +674,7 @@ export function SendApiPage() {
 
             <div className="send-content-grid">
               <label className="field">
-                <span>
-                  Text body
-                </span>
+                <span>Text body</span>
 
                 <textarea
                   onChange={(event) =>
@@ -559,9 +689,7 @@ export function SendApiPage() {
               </label>
 
               <label className="field">
-                <span>
-                  HTML body
-                </span>
+                <span>HTML body</span>
 
                 <textarea
                   onChange={(event) =>
@@ -664,7 +792,6 @@ export function SendApiPage() {
               type="submit"
             >
               <Send size={14} />
-
               {mutation.isPending
                 ? 'Sending…'
                 : 'Send message'}
@@ -675,9 +802,7 @@ export function SendApiPage() {
         <aside className="panel send-preview">
           <header className="panel__header">
             <div>
-              <h2>
-                API request
-              </h2>
+              <h2>API request</h2>
 
               <p>
                 Payload sent to
@@ -692,9 +817,7 @@ export function SendApiPage() {
               POST
             </span>
 
-            <code>
-              /api/v1/send
-            </code>
+            <code>/api/v1/send</code>
           </div>
 
           <pre>

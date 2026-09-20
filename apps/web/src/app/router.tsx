@@ -44,6 +44,9 @@ import {
 import {
   WebhooksPage,
 } from '../features/webhooks/WebhooksPage'
+import {
+  TemplatesPage,
+} from '../features/templates/TemplatesPage'
 
 export const router =
   createBrowserRouter([
@@ -70,6 +73,10 @@ export const router =
         {
           path: 'send',
           element: <SendApiPage />,
+        },
+        {
+          path: 'templates',
+          element: <TemplatesPage />,
         },
         {
           path: 'domains',

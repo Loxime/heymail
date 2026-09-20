@@ -173,4 +173,79 @@ assert [item["version"] for item in d["items"]] == [2, 1]
 PY
 
 echo "PASS: workspace templates are isolated and versions are immutable"
+
+cat >"$TMP_DIR/render-missing.json" <<'JSON'
+{
+  "variables": {}
+}
+JSON
+
+RENDER_MISSING="$TMP_DIR/render-missing.out"
+[ "$(request "$TOKEN_A" POST "/console/templates/$TEMPLATE_ID/render" "$TMP_DIR/render-missing.json" "$RENDER_MISSING")" = "422" ] \
+  || { cat "$RENDER_MISSING" >&2; fail "missing template variable did not fail closed"; }
+
+cat >"$TMP_DIR/render.json" <<'JSON'
+{
+  "variables": {
+    "first_name": "Ada"
+  }
+}
+JSON
+
+RENDER="$TMP_DIR/render.out"
+[ "$(request "$TOKEN_A" POST "/console/templates/$TEMPLATE_ID/render" "$TMP_DIR/render.json" "$RENDER")" = "200" ] \
+  || { cat "$RENDER" >&2; fail "template render failed"; }
+
+python3 - "$RENDER" "$TEMPLATE_ID" <<'PY'
+import json, sys
+d=json.load(open(sys.argv[1], encoding="utf-8"))
+assert d["templateId"] == int(sys.argv[2])
+assert d["version"] == 2
+assert d["subject"] == "Updated Ada"
+assert d["text"] is None
+assert d["html"] == "<h1>Hello Ada</h1>"
+PY
+
+FOREIGN_RENDER="$TMP_DIR/foreign-render.out"
+[ "$(request "$TOKEN_B" POST "/console/templates/$TEMPLATE_ID/render" "$TMP_DIR/render.json" "$FOREIGN_RENDER")" = "404" ] \
+  || fail "foreign workspace rendered template"
+
+echo "PASS: template rendering resolves variables and remains workspace isolated"
+
+DUPLICATE="$TMP_DIR/duplicate.out"
+[ "$(request "$TOKEN_A" POST "/console/templates/$TEMPLATE_ID/duplicate" "" "$DUPLICATE")" = "201" ] \
+  || { cat "$DUPLICATE" >&2; fail "template duplication failed"; }
+
+DUPLICATE_ID="$(
+  python3 - "$DUPLICATE" "$TEMPLATE_ID" <<'PY'
+import json, sys
+d=json.load(open(sys.argv[1], encoding="utf-8"))
+assert d["id"] != int(sys.argv[2])
+assert d["version"] == 1
+assert d["subject"] == "Updated {{first_name}}"
+assert d["text"] is None
+assert d["html"] == "<h1>Hello {{first_name}}</h1>"
+assert d["variables"] == ["first_name"]
+assert "copy" in d["name"].lower()
+print(d["id"])
+PY
+)"
+
+[[ "$DUPLICATE_ID" =~ ^[1-9][0-9]*$ ]] || fail "duplicate template id invalid"
+
+DUP_HISTORY="$TMP_DIR/duplicate-history.out"
+[ "$(request "$TOKEN_A" GET "/console/templates/$DUPLICATE_ID/history" "" "$DUP_HISTORY")" = "200" ] \
+  || fail "duplicate history failed"
+
+python3 - "$DUP_HISTORY" <<'PY'
+import json, sys
+d=json.load(open(sys.argv[1], encoding="utf-8"))
+assert [item["version"] for item in d["items"]] == [1]
+PY
+
+FOREIGN_DUP="$TMP_DIR/foreign-duplicate.out"
+[ "$(request "$TOKEN_B" POST "/console/templates/$TEMPLATE_ID/duplicate" "" "$FOREIGN_DUP")" = "404" ] \
+  || fail "foreign workspace duplicated template"
+
+echo "PASS: duplication copies only the latest version into a new version-1 template"
 echo "ALL CONSOLE EMAIL TEMPLATE TESTS PASSED"
