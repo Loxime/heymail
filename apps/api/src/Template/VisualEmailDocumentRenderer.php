@@ -414,8 +414,9 @@ final class VisualEmailDocumentRenderer
                     self::escape(
                         $block['url'],
                     ),
-                    self::escape(
+                    self::visualText(
                         $block['alt'],
+                        false,
                     ),
                 ),
             'button'

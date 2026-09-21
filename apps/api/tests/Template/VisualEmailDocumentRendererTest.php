@@ -81,6 +81,54 @@ final class VisualEmailDocumentRendererTest extends TestCase
         );
     }
 
+    public function testImageAltVariableIsEscapedInAttributeContext(): void
+    {
+        $visual =
+            new VisualEmailDocumentRenderer();
+
+        $html =
+            $visual->render([
+                'version' => 1,
+                'blocks' => [
+                    [
+                        'id' => 'image',
+                        'type' => 'image',
+                        'url'
+                            => 'https://example.test/image.png',
+                        'alt'
+                            => 'Portrait {{first_name}}',
+                        'align' => 'center',
+                    ],
+                ],
+            ]);
+
+        self::assertStringContainsString(
+            'alt="Portrait [[HMHTML:first_name]]"',
+            $html,
+        );
+
+        $rendered =
+            (
+                new \App\Template\EmailTemplateRenderer()
+            )->render(
+                $html,
+                [
+                    'first_name'
+                        => '" onerror="alert(1)',
+                ],
+            );
+
+        self::assertStringContainsString(
+            'alt="Portrait &quot; onerror=&quot;alert(1)"',
+            $rendered,
+        );
+
+        self::assertStringNotContainsString(
+            'alt="Portrait " onerror="alert(1)"',
+            $rendered,
+        );
+    }
+
     public function testRejectsInsecureUrl(): void
     {
         $renderer =
