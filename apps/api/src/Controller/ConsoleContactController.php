@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Controller;
 
+use App\Automation\ContactAddedAutomationTrigger;
 use App\Console\ConsoleAuthentication;
 use DateTimeImmutable;
 use DateTimeZone;
@@ -30,6 +31,7 @@ final readonly class ConsoleContactController
     public function __construct(
         private ConsoleAuthentication $authentication,
         private Connection $connection,
+        private ContactAddedAutomationTrigger $automationTrigger,
     ) {
     }
 
@@ -295,6 +297,11 @@ SQL,
                 $contactId,
                 $listIds,
                 $now,
+            );
+
+            $this->automationTrigger->enqueue(
+                $workspaceId,
+                $contactId,
             );
 
             $this->connection->commit();
