@@ -10,6 +10,7 @@ use App\Entity\OutboundMessagePayload;
 use App\Enum\OutboundMessageEventType;
 use App\Mail\DsnSpoolEvent;
 use App\Mail\OutboundMessagePayloadCryptor;
+use App\Mail\RecipientDomain;
 use App\Suppression\EmailSuppressionService;
 use Doctrine\ORM\EntityManagerInterface;
 use InvalidArgumentException;
@@ -447,6 +448,10 @@ final class ConsumeDsnSpoolCommand extends Command
                         $event->detail,
                     sourceEventId:
                         $event->sourceEventId,
+                    recipientDomain:
+                        RecipientDomain::fromEmail(
+                            $matchedRecipient,
+                        ),
                 );
 
                 $this->entityManager->flush();

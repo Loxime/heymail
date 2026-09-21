@@ -339,6 +339,7 @@ INSERT INTO outbound_message_event (
     event_type,
     occurred_at,
     recipient_hash,
+    recipient_domain,
     smtp_status,
     detail,
     source_event_id
@@ -348,6 +349,7 @@ VALUES (
     :event_type,
     :occurred_at,
     :recipient_hash,
+    :recipient_domain,
     :smtp_status,
     :detail,
     :source_event_id
@@ -423,6 +425,20 @@ SQL
                                 $recipient,
                             ),
                         ),
+                'recipient_domain'
+                    => $recipient === null
+                        ? null
+                        : substr(
+                            strtolower(
+                                $recipient,
+                            ),
+                            (int) strrpos(
+                                strtolower(
+                                    $recipient,
+                                ),
+                                '@',
+                            ) + 1,
+                        ),
                 'smtp_status'
                     => $smtpStatus,
                 'detail'
@@ -465,7 +481,7 @@ SQL
         $m0,
         'bounced',
         '2042-03-02 14:00:00',
-        'outside-created@example.test',
+        'outside-created@outlook.com',
         '5.1.1',
         '550 permanent rejection',
         $token . ':m0:bounced',
@@ -495,7 +511,7 @@ SQL
         $m1,
         'delivered',
         '2042-03-01 09:01:00',
-        'one@example.test',
+        'one@gmail.com',
         '2.0.0',
         '250 accepted',
         $token . ':m1:delivered',
@@ -526,7 +542,7 @@ SQL
         $m2,
         'tempfail',
         '2042-03-02 10:01:00',
-        'two@example.test',
+        'two@gmail.com',
         '4.1.1',
         '450 temporary rejection',
         $token . ':m2:tempfail',
@@ -536,7 +552,7 @@ SQL
         $m2,
         'delivered',
         '2042-03-03 11:00:00',
-        'two@example.test',
+        'two@gmail.com',
         '2.0.0',
         '250 accepted after retry',
         $token . ':m2:delivered',
@@ -740,6 +756,27 @@ assert math.isclose(
     abs_tol=0.00001,
 )
 
+assert payload["recipientDomains"] == [
+    {
+        "domain": "gmail.com",
+        "delivered": 2,
+        "tempfail": 1,
+        "bounced": 0,
+        "terminalOutcomes": 2,
+        "deliveryRate": 1,
+        "bounceRate": 0,
+    },
+    {
+        "domain": "outlook.com",
+        "delivered": 0,
+        "tempfail": 0,
+        "bounced": 1,
+        "terminalOutcomes": 1,
+        "deliveryRate": 0,
+        "bounceRate": 1,
+    },
+]
+
 assert payload["activity"] == [
     {
         "date": "2042-03-01",
@@ -774,6 +811,7 @@ PY
 
 pass "dashboard aggregates message states correctly"
 pass "delivery metrics use recipient events and terminal outcomes"
+pass "recipient-domain metrics preserve terminal-outcome semantics"
 pass "daily activity is zero-filled in UTC"
 pass "dashboard period uses inclusive-from and exclusive-to semantics"
 

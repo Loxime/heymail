@@ -29,10 +29,21 @@ export interface DashboardActivityDay {
   bounced: number
 }
 
+export interface DashboardRecipientDomain {
+  domain: string | null
+  delivered: number
+  tempfail: number
+  bounced: number
+  terminalOutcomes: number
+  deliveryRate: number
+  bounceRate: number
+}
+
 export interface DashboardResponse {
   period: DashboardPeriod
   messages: DashboardMessages
   delivery: DashboardDelivery
+  recipientDomains: DashboardRecipientDomain[]
   activity: DashboardActivityDay[]
 }
 

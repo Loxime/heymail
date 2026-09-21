@@ -436,6 +436,7 @@ $query = $pdo->prepare(
 SELECT
     event_type,
     recipient_hash,
+    recipient_domain,
     smtp_status,
     detail
 FROM outbound_message_event
@@ -505,6 +506,8 @@ foreach ($query->fetchAll(PDO::FETCH_ASSOC) as $row) {
             $row['event_type'],
             ':',
             $row['smtp_status'],
+            ':',
+            $row['recipient_domain'],
             PHP_EOL;
     }
 
@@ -602,7 +605,7 @@ pass "message remains SUBMITTED after downstream delivery outcomes"
 pass "success recipient persisted DELIVERED"
 pass "temporary recipient persisted TEMPFAIL"
 pass "permanent recipient persisted BOUNCED"
-pass "delivery metadata stores recipient hashes without plaintext leakage"
+pass "delivery metadata stores recipient hashes plus domain without plaintext address leakage"
 
 SUPPRESSION="$(
     docker compose exec \

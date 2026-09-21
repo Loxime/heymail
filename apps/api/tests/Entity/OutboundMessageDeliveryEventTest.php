@@ -50,6 +50,8 @@ final class OutboundMessageDeliveryEventTest extends TestCase
                 'sha256',
                 'delivered-event',
             ),
+            recipientDomain:
+                'example.test',
         );
 
         self::assertSame(
@@ -73,6 +75,11 @@ final class OutboundMessageDeliveryEventTest extends TestCase
         self::assertSame(
             $recipientHash,
             $events[5]->getRecipientHash(),
+        );
+
+        self::assertSame(
+            'example.test',
+            $events[5]->getRecipientDomain(),
         );
 
         self::assertSame(

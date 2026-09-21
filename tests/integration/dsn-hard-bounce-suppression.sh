@@ -371,9 +371,10 @@ $c=DriverManager::getConnection([
  'password'=>trim(file_get_contents((string)getenv('DB_PASSWORD_FILE'))),
 ]);
 
-$eventCount=(int)$c->fetchOne(
+$eventRow=$c->fetchAssociative(
  <<<'SQL'
-SELECT COUNT(*)
+SELECT
+ recipient_domain
 FROM outbound_message_event
 WHERE outbound_message_id=:message_id
   AND event_type='bounced'
@@ -384,6 +385,8 @@ SQL,
   'source_event_id'=>getenv('SOURCE_EVENT_ID'),
  ],
 );
+
+$eventCount=$eventRow===false ? 0 : 1;
 
 $row=$c->fetchAssociative(
  <<<'SQL'
@@ -406,6 +409,11 @@ SQL,
 );
 
 echo "EVENT_COUNT=$eventCount\n";
+echo 'EVENT_DOMAIN=',
+ $eventRow===false
+  ? 'NONE'
+  : $eventRow['recipient_domain'],
+ "\n";
 
 if($row===false){
  echo "SUPPRESSION=NONE\n";
@@ -429,12 +437,15 @@ printf '%s\n' "$STATE"
 grep -Fqx 'EVENT_COUNT=1' <<<"$STATE" \
   || fail "authenticated DSN bounce was not persisted exactly once"
 
+grep -Fqx 'EVENT_DOMAIN=example.test' <<<"$STATE" \
+  || fail "authenticated DSN bounce did not persist recipient domain"
+
 grep -Fqx \
   "SUPPRESSION=global:hard_bounce:$OUTBOUND_ID:$SOURCE_EVENT_ID" \
   <<<"$STATE" \
   || fail "DSN hard bounce did not create expected global suppression"
 
-echo "PASS: authenticated DSN hard bounce creates workspace-global suppression"
+echo "PASS: authenticated DSN hard bounce persists recipient domain and creates workspace-global suppression"
 
 write_event
 

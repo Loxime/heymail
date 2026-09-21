@@ -233,6 +233,56 @@ SQL,
                     $parameters,
                 );
 
+        $recipientDomains =
+            $this->connection
+                ->fetchAllAssociative(
+                    <<<'SQL'
+SELECT
+    ome.recipient_domain,
+    COUNT(*) FILTER (
+        WHERE ome.event_type = 'delivered'
+    ) AS delivered,
+    COUNT(*) FILTER (
+        WHERE ome.event_type = 'tempfail'
+    ) AS tempfail,
+    COUNT(*) FILTER (
+        WHERE ome.event_type = 'bounced'
+    ) AS bounced
+FROM outbound_message_event ome
+INNER JOIN outbound_message om
+    ON om.id = ome.outbound_message_id
+WHERE (
+        om.workspace_id = :workspace_id
+        OR (
+            om.workspace_id IS NULL
+            AND :workspace_id = :legacy_workspace_id
+        )
+    )
+  AND ome.occurred_at >= :from
+  AND ome.occurred_at < :to
+  AND ome.event_type IN (
+      'delivered',
+      'tempfail',
+      'bounced'
+  )
+GROUP BY ome.recipient_domain
+ORDER BY
+    (
+        COUNT(*) FILTER (
+            WHERE ome.event_type = 'delivered'
+        )
+        +
+        COUNT(*) FILTER (
+            WHERE ome.event_type = 'bounced'
+        )
+    ) DESC,
+    COUNT(*) DESC,
+    ome.recipient_domain ASC NULLS LAST
+LIMIT 50
+SQL,
+                    $parameters,
+                );
+
         return [
             'period' => [
                 'from'
@@ -304,6 +354,61 @@ SQL,
                         $terminal,
                     ),
             ],
+            'recipientDomains'
+                => array_map(
+                    static function (
+                        array $row,
+                    ): array {
+                        $delivered =
+                            (int) $row[
+                                'delivered'
+                            ];
+
+                        $tempfail =
+                            (int) $row[
+                                'tempfail'
+                            ];
+
+                        $bounced =
+                            (int) $row[
+                                'bounced'
+                            ];
+
+                        $terminal =
+                            $delivered
+                            + $bounced;
+
+                        return [
+                            'domain'
+                                => $row[
+                                    'recipient_domain'
+                                ] === null
+                                    ? null
+                                    : (string) $row[
+                                        'recipient_domain'
+                                    ],
+                            'delivered'
+                                => $delivered,
+                            'tempfail'
+                                => $tempfail,
+                            'bounced'
+                                => $bounced,
+                            'terminalOutcomes'
+                                => $terminal,
+                            'deliveryRate'
+                                => self::rate(
+                                    $delivered,
+                                    $terminal,
+                                ),
+                            'bounceRate'
+                                => self::rate(
+                                    $bounced,
+                                    $terminal,
+                                ),
+                        ];
+                    },
+                    $recipientDomains,
+                ),
             'activity'
                 => array_map(
                     static fn (

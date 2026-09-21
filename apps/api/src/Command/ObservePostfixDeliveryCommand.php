@@ -9,6 +9,7 @@ use App\Entity\OutboundMessageEvent;
 use App\Enum\OutboundMessageEventType;
 use App\Mail\PostfixDeliveryFeedback;
 use App\Mail\PostfixDeliveryLogParser;
+use App\Mail\RecipientDomain;
 use App\Suppression\EmailSuppressionService;
 use Doctrine\ORM\EntityManagerInterface;
 use LogicException;
@@ -264,6 +265,10 @@ final class ObservePostfixDeliveryCommand extends Command
                 smtpStatus: $feedback->smtpStatus,
                 detail: $feedback->detail,
                 sourceEventId: $feedback->sourceEventId,
+                recipientDomain:
+                    RecipientDomain::fromEmail(
+                        $feedback->recipient,
+                    ),
             );
 
             $this->entityManager->flush();

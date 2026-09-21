@@ -47,6 +47,14 @@ use InvalidArgumentException;
         'event_type',
     ],
 )]
+#[ORM\Index(
+    name: 'idx_outbound_message_event_domain_activity',
+    columns: [
+        'occurred_at',
+        'event_type',
+        'recipient_domain',
+    ],
+)]
 final class OutboundMessageEvent
 {
     #[ORM\Id]
@@ -90,6 +98,14 @@ final class OutboundMessageEvent
     private ?string $recipientHash;
 
     #[ORM\Column(
+        name: 'recipient_domain',
+        type: Types::STRING,
+        length: 253,
+        nullable: true,
+    )]
+    private ?string $recipientDomain;
+
+    #[ORM\Column(
         name: 'smtp_status',
         type: Types::STRING,
         length: 16,
@@ -120,6 +136,7 @@ final class OutboundMessageEvent
         ?string $smtpStatus = null,
         ?string $detail = null,
         ?string $sourceEventId = null,
+        ?string $recipientDomain = null,
     ) {
         if ($type->isDelivery()) {
             if (
@@ -131,6 +148,25 @@ final class OutboundMessageEvent
             ) {
                 throw new InvalidArgumentException(
                     'Delivery event requires a valid recipient hash.',
+                );
+            }
+
+            if (
+                $recipientDomain !== null
+                && (
+                    strlen($recipientDomain) > 253
+                    || $recipientDomain
+                        !== strtolower(
+                            $recipientDomain,
+                        )
+                    || preg_match(
+                        '/^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)*[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/D',
+                        $recipientDomain,
+                    ) !== 1
+                )
+            ) {
+                throw new InvalidArgumentException(
+                    'Delivery event recipient domain is invalid.',
                 );
             }
 
@@ -169,6 +205,7 @@ final class OutboundMessageEvent
             }
         } elseif (
             $recipientHash !== null
+            || $recipientDomain !== null
             || $smtpStatus !== null
             || $detail !== null
             || $sourceEventId !== null
@@ -182,6 +219,7 @@ final class OutboundMessageEvent
         $this->type = $type;
         $this->occurredAt = $occurredAt;
         $this->recipientHash = $recipientHash;
+        $this->recipientDomain = $recipientDomain;
         $this->smtpStatus = $smtpStatus;
         $this->detail = $detail;
         $this->sourceEventId = $sourceEventId;
@@ -210,6 +248,11 @@ final class OutboundMessageEvent
     public function getRecipientHash(): ?string
     {
         return $this->recipientHash;
+    }
+
+    public function getRecipientDomain(): ?string
+    {
+        return $this->recipientDomain;
     }
 
     public function getSmtpStatus(): ?string

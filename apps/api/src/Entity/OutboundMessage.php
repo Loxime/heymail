@@ -376,6 +376,7 @@ final class OutboundMessage
         string $smtpStatus,
         string $detail,
         string $sourceEventId,
+        ?string $recipientDomain = null,
         ?DateTimeImmutable $at = null,
     ): void {
         if (!$type->isDelivery()) {
@@ -437,6 +438,7 @@ final class OutboundMessage
                 smtpStatus: $smtpStatus,
                 detail: $detail,
                 sourceEventId: $sourceEventId,
+                recipientDomain: $recipientDomain,
             ),
         );
     }
