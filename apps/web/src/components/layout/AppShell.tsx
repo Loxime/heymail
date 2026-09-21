@@ -15,6 +15,7 @@ import {
   UserRoundCheck,
   Users,
   Webhook,
+  Workflow,
 } from 'lucide-react'
 import {
   useEffect,
@@ -76,6 +77,11 @@ const groups = [
         to: '/campaigns',
         label: 'Campagnes',
         icon: Megaphone,
+      },
+      {
+        to: '/automations',
+        label: 'Automatisations',
+        icon: Workflow,
       },
     ],
   },

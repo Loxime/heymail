@@ -431,6 +431,34 @@ export interface ConsoleCampaignPreviewResponse {
   html: string | null
 }
 
+export type ConsoleAutomationTriggerType =
+  | 'contact_added'
+  | 'api_event'
+
+export type ConsoleAutomationStatus =
+  | 'active'
+  | 'paused'
+
+export interface ConsoleAutomation {
+  id: number
+  name: string
+  triggerType: ConsoleAutomationTriggerType
+  eventName: string | null
+  delaySeconds: number
+  senderId: number | null
+  senderEmail: string | null
+  templateId: number | null
+  templateName: string | null
+  status: ConsoleAutomationStatus
+  jobCount: number
+  createdAt: string
+  updatedAt: string
+}
+
+export interface ConsoleAutomationListResponse {
+  items: ConsoleAutomation[]
+}
+
 
 export type ConsoleSuppressionScope =
   | 'global'
