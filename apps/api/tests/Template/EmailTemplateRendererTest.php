@@ -49,4 +49,37 @@ final class EmailTemplateRendererTest extends TestCase
             ),
         );
     }
+
+    public function testHtmlMarkerEscapesVariableValue(): void
+    {
+        $renderer =
+            new EmailTemplateRenderer();
+
+        self::assertSame(
+            'Hello &lt;b&gt;Ada&lt;/b&gt;.',
+            $renderer->render(
+                'Hello [[HMHTML:first_name]].',
+                [
+                    'first_name'
+                        => '<b>Ada</b>',
+                ],
+            ),
+        );
+    }
+
+    public function testExtractsVisualHtmlMarkers(): void
+    {
+        $renderer =
+            new EmailTemplateRenderer();
+
+        self::assertSame(
+            [
+                'company',
+                'first_name',
+            ],
+            $renderer->variables(
+                '[[HMHTML:first_name]] {{company}}',
+            ),
+        );
+    }
 }

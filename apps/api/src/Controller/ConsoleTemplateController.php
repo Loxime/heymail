@@ -6,10 +6,12 @@ namespace App\Controller;
 
 use App\Console\ConsoleAuthentication;
 use App\Template\EmailTemplateRenderer;
+use App\Template\VisualEmailDocumentRenderer;
 use DateTimeImmutable;
 use DateTimeZone;
 use Doctrine\DBAL\Connection;
 use Doctrine\DBAL\Exception\UniqueConstraintViolationException;
+use Doctrine\DBAL\Types\Types;
 use InvalidArgumentException;
 use JsonException;
 use RuntimeException;
@@ -27,6 +29,7 @@ final readonly class ConsoleTemplateController
         private ConsoleAuthentication $authentication,
         private Connection $connection,
         private EmailTemplateRenderer $renderer,
+        private VisualEmailDocumentRenderer $visualRenderer,
     ) {
     }
 
@@ -50,6 +53,7 @@ SELECT
     v.subject,
     v.text_body,
     v.html_body,
+    v.visual_document,
     v.created_at AS version_created_at
 FROM email_template t
 INNER JOIN LATERAL (
@@ -58,6 +62,7 @@ INNER JOIN LATERAL (
         subject,
         text_body,
         html_body,
+        visual_document,
         created_at
     FROM email_template_version
     WHERE template_id = t.id
@@ -95,7 +100,7 @@ SQL,
 
         try {
             $name = self::name($payload['name'] ?? null);
-            $content = self::content($payload);
+            $content = $this->content($payload);
         } catch (InvalidArgumentException $exception) {
             return self::error(
                 'invalid_template',
@@ -147,7 +152,13 @@ SQL,
                     'subject' => $content['subject'],
                     'text_body' => $content['text'],
                     'html_body' => $content['html'],
+                    'visual_document'
+                        => $content['visual'],
                     'created_at' => $now,
+                ],
+                [
+                    'visual_document'
+                        => Types::JSON,
                 ],
             );
 
@@ -198,7 +209,7 @@ SQL,
         }
 
         try {
-            $content = self::content($payload);
+            $content = $this->content($payload);
         } catch (InvalidArgumentException $exception) {
             return self::error(
                 'invalid_template',
@@ -250,7 +261,13 @@ SQL,
                     'subject' => $content['subject'],
                     'text_body' => $content['text'],
                     'html_body' => $content['html'],
+                    'visual_document'
+                        => $content['visual'],
                     'created_at' => $now,
+                ],
+                [
+                    'visual_document'
+                        => Types::JSON,
                 ],
             );
 
@@ -298,13 +315,15 @@ SELECT
     t.name,
     v.subject,
     v.text_body,
-    v.html_body
+    v.html_body,
+    v.visual_document
 FROM email_template t
 INNER JOIN LATERAL (
     SELECT
         subject,
         text_body,
-        html_body
+        html_body,
+        visual_document
     FROM email_template_version
     WHERE template_id = t.id
     ORDER BY version DESC
@@ -376,7 +395,15 @@ SQL,
                         'subject' => (string) $source['subject'],
                         'text_body' => $source['text_body'],
                         'html_body' => $source['html_body'],
+                        'visual_document'
+                            => $this->visualDocument(
+                                $source['visual_document'],
+                            ),
                         'created_at' => $now,
+                    ],
+                    [
+                        'visual_document'
+                            => Types::JSON,
                     ],
                 );
 
@@ -557,6 +584,7 @@ SELECT
     subject,
     text_body,
     html_body,
+    visual_document,
     created_at
 FROM email_template_version
 WHERE template_id = :template_id
@@ -573,6 +601,10 @@ SQL,
                     'subject' => (string) $row['subject'],
                     'text' => $row['text_body'] === null ? null : (string) $row['text_body'],
                     'html' => $row['html_body'] === null ? null : (string) $row['html_body'],
+                    'visual'
+                        => $this->visualDocument(
+                            $row['visual_document'],
+                        ),
                     'variables' => $this->variables(
                         (string) $row['subject'],
                         $row['text_body'],
@@ -645,43 +677,130 @@ SQL,
     }
 
     /**
-     * @return array{subject:string,text:string|null,html:string|null}
+     * @return array{
+     *     subject:string,
+     *     text:string|null,
+     *     html:string|null,
+     *     visual:array<string,mixed>|null
+     * }
      */
-    private static function content(array $payload): array
-    {
-        foreach (array_keys($payload) as $key) {
-            if (!in_array($key, ['name', 'subject', 'text', 'html'], true)) {
-                throw new InvalidArgumentException('Unexpected template field.');
+    private function content(
+        array $payload,
+    ): array {
+        foreach (
+            array_keys($payload)
+            as $key
+        ) {
+            if (
+                !in_array(
+                    $key,
+                    [
+                        'name',
+                        'subject',
+                        'text',
+                        'html',
+                        'visual',
+                    ],
+                    true,
+                )
+            ) {
+                throw new InvalidArgumentException(
+                    'Unexpected template field.',
+                );
             }
         }
 
-        $subject = $payload['subject'] ?? null;
-        $text = $payload['text'] ?? null;
-        $html = $payload['html'] ?? null;
+        $subject =
+            $payload['subject']
+            ?? null;
+
+        $text =
+            $payload['text']
+            ?? null;
+
+        $html =
+            $payload['html']
+            ?? null;
+
+        $visualValue =
+            $payload['visual']
+            ?? null;
 
         if (
             !is_string($subject)
             || trim($subject) === ''
             || strlen($subject) > 255
-            || preg_match('/[\x00-\x1F\x7F]/', $subject) === 1
+            || preg_match(
+                '/[\x00-\x1F\x7F]/',
+                $subject,
+            ) === 1
         ) {
-            throw new InvalidArgumentException('Template subject is invalid.');
+            throw new InvalidArgumentException(
+                'Template subject is invalid.',
+            );
         }
 
-        foreach ([
-            'text' => [$text, 1048576],
-            'html' => [$html, 2097152],
-        ] as $label => [$value, $max]) {
+        if ($visualValue !== null) {
+            if (
+                $html !== null
+                && $html !== ''
+            ) {
+                throw new InvalidArgumentException(
+                    'Visual template HTML is generated by the server.',
+                );
+            }
+
+            $visual =
+                $this
+                    ->visualRenderer
+                    ->normalize(
+                        $visualValue,
+                    );
+
+            $html =
+                $this
+                    ->visualRenderer
+                    ->render(
+                        $visual,
+                    );
+        } else {
+            $visual = null;
+        }
+
+        foreach (
+            [
+                'text'
+                    => [
+                        $text,
+                        1048576,
+                    ],
+                'html'
+                    => [
+                        $html,
+                        2097152,
+                    ],
+            ]
+            as $label => [
+                $value,
+                $max,
+            ]
+        ) {
             if (
                 $value !== null
                 && (
                     !is_string($value)
                     || strlen($value) > $max
-                    || str_contains($value, "\0")
+                    || str_contains(
+                        $value,
+                        "\0",
+                    )
                 )
             ) {
                 throw new InvalidArgumentException(
-                    sprintf('Template %s body is invalid.', $label),
+                    sprintf(
+                        'Template %s body is invalid.',
+                        $label,
+                    ),
                 );
             }
         }
@@ -699,6 +818,7 @@ SQL,
             'subject' => $subject,
             'text' => $text,
             'html' => $html,
+            'visual' => $visual,
         ];
     }
 
@@ -718,6 +838,7 @@ SELECT
     v.subject,
     v.text_body,
     v.html_body,
+    v.visual_document,
     v.created_at AS version_created_at
 FROM email_template t
 INNER JOIN LATERAL (
@@ -726,6 +847,7 @@ INNER JOIN LATERAL (
         subject,
         text_body,
         html_body,
+        visual_document,
         created_at
     FROM email_template_version
     WHERE template_id = t.id
@@ -762,6 +884,10 @@ SQL,
             'subject' => (string) $row['subject'],
             'text' => $row['text_body'] === null ? null : (string) $row['text_body'],
             'html' => $row['html_body'] === null ? null : (string) $row['html_body'],
+            'visual'
+                => $this->visualDocument(
+                    $row['visual_document'],
+                ),
             'variables' => $this->variables(
                 (string) $row['subject'],
                 $row['text_body'],
@@ -771,6 +897,50 @@ SQL,
             'updatedAt' => self::timestamp($row['updated_at']),
             'versionCreatedAt' => self::timestamp($row['version_created_at']),
         ];
+    }
+
+    /**
+     * @return array<string,mixed>|null
+     */
+    private function visualDocument(
+        mixed $value,
+    ): ?array {
+        if ($value === null) {
+            return null;
+        }
+
+        if (is_string($value)) {
+            try {
+                $value =
+                    json_decode(
+                        $value,
+                        true,
+                        64,
+                        JSON_THROW_ON_ERROR,
+                    );
+            } catch (JsonException $exception) {
+                throw new RuntimeException(
+                    'Stored visual email document is invalid.',
+                    0,
+                    $exception,
+                );
+            }
+        }
+
+        if (
+            !is_array($value)
+            || array_is_list($value)
+        ) {
+            throw new RuntimeException(
+                'Stored visual email document is invalid.',
+            );
+        }
+
+        return $this
+            ->visualRenderer
+            ->normalize(
+                $value,
+            );
     }
 
     /**
