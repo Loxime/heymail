@@ -51,6 +51,104 @@ final readonly class ConsoleCampaignController
         return new JsonResponse(['items' => array_map(self::serialize(...), $rows)]);
     }
 
+    #[Route(
+        '/{id}/tracking-stats',
+        name: 'console_campaigns_tracking_stats',
+        requirements: ['id' => '[1-9][0-9]*'],
+        methods: ['GET'],
+    )]
+    public function trackingStats(
+        Request $request,
+        string $id,
+    ): JsonResponse {
+        $workspaceId = $this->workspaceId(
+            $request,
+        );
+
+        if ($workspaceId instanceof JsonResponse) {
+            return $workspaceId;
+        }
+
+        $campaignId = self::positiveId(
+            $id,
+        );
+
+        if ($campaignId === null) {
+            return self::notFound();
+        }
+
+        $campaign = $this->connection->fetchAssociative(
+            <<<'SQL'
+SELECT
+    id,
+    tracking_enabled
+FROM campaign
+WHERE id = :id
+  AND workspace_id = :workspace_id
+SQL,
+            [
+                'id' => $campaignId,
+                'workspace_id' => $workspaceId,
+            ],
+        );
+
+        if ($campaign === false) {
+            return self::notFound();
+        }
+
+        $stats = $this->connection->fetchAssociative(
+            <<<'SQL'
+SELECT
+    (
+        SELECT COUNT(*)
+        FROM campaign_delivery
+        WHERE campaign_id = :campaign_id
+    ) AS tracked_recipients,
+    COUNT(DISTINCT recipient_index) FILTER (
+        WHERE event_type = 'opened'
+    ) AS opened_recipients,
+    COUNT(DISTINCT recipient_index) FILTER (
+        WHERE event_type = 'clicked'
+    ) AS clicked_recipients,
+    COUNT(*) FILTER (
+        WHERE event_type = 'clicked'
+    ) AS unique_clicks
+FROM campaign_tracking_event
+WHERE campaign_id = :campaign_id
+SQL,
+            [
+                'campaign_id' => $campaignId,
+            ],
+        );
+
+        if ($stats === false) {
+            throw new RuntimeException(
+                'Campaign tracking statistics could not be read.',
+            );
+        }
+
+        $trackedRecipients = (int) $stats['tracked_recipients'];
+        $openedRecipients = (int) $stats['opened_recipients'];
+        $clickedRecipients = (int) $stats['clicked_recipients'];
+
+        return new JsonResponse([
+            'campaignId' => $campaignId,
+            'trackingEnabled' => (bool) $campaign['tracking_enabled'],
+            'trackedRecipients' => $trackedRecipients,
+            'openedRecipients' => $openedRecipients,
+            'clickedRecipients' => $clickedRecipients,
+            'uniqueClicks' => (int) $stats['unique_clicks'],
+            'openRate' => self::rate(
+                $openedRecipients,
+                $trackedRecipients,
+            ),
+            'clickRate' => self::rate(
+                $clickedRecipients,
+                $trackedRecipients,
+            ),
+        ]);
+    }
+
     #[Route('', name: 'console_campaigns_create', methods: ['POST'])]
     public function create(Request $request): JsonResponse
     {
@@ -581,6 +679,20 @@ final readonly class ConsoleCampaignController
         }
 
         return preg_split('/\s+/u', trim($name), 2)[0] ?? '';
+    }
+
+    private static function rate(
+        int $value,
+        int $total,
+    ): float {
+        if ($total === 0) {
+            return 0.0;
+        }
+
+        return round(
+            $value / $total,
+            4,
+        );
     }
 
     private static function timestamp(mixed $value): string

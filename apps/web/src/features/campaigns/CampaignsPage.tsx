@@ -26,6 +26,7 @@ import type {
   ConsoleCampaign,
   ConsoleCampaignListResponse,
   ConsoleCampaignPreviewResponse,
+  ConsoleCampaignTrackingStats,
   ConsoleContactListListResponse,
   ConsoleEmailTemplateListResponse,
   SenderIdentityListResponse,
@@ -36,6 +37,19 @@ function previewDocument(
   html: string,
 ): string {
   return `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'; font-src data:; base-uri 'none'; form-action 'none'">${html}`
+}
+
+function formatPercent(
+  value: number,
+): string {
+  return new Intl.NumberFormat(
+    undefined,
+    {
+      style: 'percent',
+      minimumFractionDigits: 1,
+      maximumFractionDigits: 1,
+    },
+  ).format(value)
 }
 
 export function CampaignsPage() {
@@ -112,6 +126,31 @@ export function CampaignsPage() {
     [items, selectedId],
   )
 
+  const trackingStats = useQuery({
+    queryKey: [
+      'console-campaign-tracking-stats',
+      selectedId,
+    ],
+    queryFn: () => {
+      if (selectedId === null) {
+        throw new Error(
+          'Select a campaign.',
+        )
+      }
+
+      return apiGet<ConsoleCampaignTrackingStats>(
+        `/console/campaigns/${selectedId}/tracking-stats`,
+      )
+    },
+    enabled:
+      selectedId !== null
+      && selected?.trackingEnabled === true,
+    refetchInterval:
+      selected?.trackingEnabled
+        ? 5000
+        : false,
+  })
+
   useEffect(
     () => {
       if (
@@ -130,9 +169,16 @@ export function CampaignsPage() {
   )
 
   const refresh = async () => {
-    await queryClient.invalidateQueries({
-      queryKey: ['console-campaigns'],
-    })
+    await Promise.all([
+      queryClient.invalidateQueries({
+        queryKey: ['console-campaigns'],
+      }),
+      queryClient.invalidateQueries({
+        queryKey: [
+          'console-campaign-tracking-stats',
+        ],
+      }),
+    ])
   }
 
   const parseVariables = () => {
@@ -670,6 +716,87 @@ export function CampaignsPage() {
               )}
             </div>
           </section>
+
+          {selected.trackingEnabled && (
+            <section className="panel campaign-tracking-stats">
+              <header className="panel__header">
+                <div>
+                  <h2>Engagement</h2>
+                  <p>
+                    Unique open and click activity
+                    for recipients already submitted
+                    by this campaign.
+                  </p>
+                </div>
+              </header>
+
+              {trackingStats.isLoading && (
+                <div className="campaign-tracking-stats__empty">
+                  Loading tracking stats…
+                </div>
+              )}
+
+              {trackingStats.isError && (
+                <div className="campaign-tracking-stats__empty">
+                  Unable to load tracking stats.
+                </div>
+              )}
+
+              {trackingStats.data && (
+                <div className="campaign-tracking-stats__grid">
+                  <div className="campaign-tracking-stat">
+                    <span>Tracked recipients</span>
+                    <strong>
+                      {trackingStats.data.trackedRecipients
+                        .toLocaleString()}
+                    </strong>
+                    <small>
+                      Entered the campaign send pipeline.
+                    </small>
+                  </div>
+
+                  <div className="campaign-tracking-stat">
+                    <span>Unique opens</span>
+                    <strong>
+                      {trackingStats.data.openedRecipients
+                        .toLocaleString()}
+                    </strong>
+                    <small>
+                      {formatPercent(
+                        trackingStats.data.openRate,
+                      )}
+                      {' open rate'}
+                    </small>
+                  </div>
+
+                  <div className="campaign-tracking-stat">
+                    <span>Unique clickers</span>
+                    <strong>
+                      {trackingStats.data.clickedRecipients
+                        .toLocaleString()}
+                    </strong>
+                    <small>
+                      {formatPercent(
+                        trackingStats.data.clickRate,
+                      )}
+                      {' click rate'}
+                    </small>
+                  </div>
+
+                  <div className="campaign-tracking-stat">
+                    <span>Unique clicks</span>
+                    <strong>
+                      {trackingStats.data.uniqueClicks
+                        .toLocaleString()}
+                    </strong>
+                    <small>
+                      Deduplicated per recipient and target.
+                    </small>
+                  </div>
+                </div>
+              )}
+            </section>
+          )}
 
           {selected.status === 'draft' && (
             <div className="campaign-preview-grid">

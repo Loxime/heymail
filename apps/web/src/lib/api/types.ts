@@ -358,6 +358,17 @@ export interface ConsoleCampaignListResponse {
   items: ConsoleCampaign[]
 }
 
+export interface ConsoleCampaignTrackingStats {
+  campaignId: number
+  trackingEnabled: boolean
+  trackedRecipients: number
+  openedRecipients: number
+  clickedRecipients: number
+  uniqueClicks: number
+  openRate: number
+  clickRate: number
+}
+
 export interface ConsoleCampaignPreviewResponse {
   subject: string
   text: string | null
