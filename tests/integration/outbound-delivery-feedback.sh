@@ -47,6 +47,7 @@ cleanup() {
             -T \
             -e OUTBOUND_ID="$OUTBOUND_ID" \
             -e SENDER_EMAIL="${SENDER_EMAIL:-}" \
+            -e BOUNCE_EMAIL="${BOUNCE_EMAIL:-}" \
             api \
             php <<'PHP' >/dev/null 2>&1
 <?php
@@ -99,6 +100,24 @@ if (
 
     $delete->execute([
         'email' => $email,
+    ]);
+}
+
+$bounceEmail = getenv('BOUNCE_EMAIL');
+
+if (
+    is_string($bounceEmail)
+    && $bounceEmail !== ''
+) {
+    $delete = $pdo->prepare(
+        'DELETE FROM email_suppression WHERE email_hash = :email_hash',
+    );
+
+    $delete->execute([
+        'email_hash' => hash(
+            'sha256',
+            strtolower($bounceEmail),
+        ),
     ]);
 }
 PHP
@@ -584,6 +603,94 @@ pass "success recipient persisted DELIVERED"
 pass "temporary recipient persisted TEMPFAIL"
 pass "permanent recipient persisted BOUNCED"
 pass "delivery metadata stores recipient hashes without plaintext leakage"
+
+SUPPRESSION="$(
+    docker compose exec \
+        -T \
+        -e OUTBOUND_ID="$OUTBOUND_ID" \
+        -e SUCCESS_EMAIL="$SUCCESS_EMAIL" \
+        -e TEMPFAIL_EMAIL="$TEMPFAIL_EMAIL" \
+        -e BOUNCE_EMAIL="$BOUNCE_EMAIL" \
+        api \
+        php <<'PHP'
+<?php
+
+declare(strict_types=1);
+
+$pdo = new PDO(
+    sprintf(
+        'pgsql:host=%s;port=%s;dbname=%s',
+        getenv('DB_HOST'),
+        getenv('DB_PORT'),
+        getenv('DB_NAME'),
+    ),
+    getenv('DB_USER'),
+    trim(
+        file_get_contents(
+            (string) getenv('DB_PASSWORD_FILE'),
+        ),
+    ),
+    [
+        PDO::ATTR_ERRMODE
+            => PDO::ERRMODE_EXCEPTION,
+    ],
+);
+
+foreach ([
+    'SUCCESS' => getenv('SUCCESS_EMAIL'),
+    'TEMPFAIL' => getenv('TEMPFAIL_EMAIL'),
+    'BOUNCE' => getenv('BOUNCE_EMAIL'),
+] as $label => $email) {
+    $stmt = $pdo->prepare(
+        <<<'SQL'
+SELECT
+    scope,
+    reason,
+    source_outbound_message_id
+FROM email_suppression
+WHERE email_hash = :email_hash
+SQL
+    );
+
+    $stmt->execute([
+        'email_hash' => hash(
+            'sha256',
+            strtolower((string) $email),
+        ),
+    ]);
+
+    $row = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    if ($row === false) {
+        echo $label, "=NONE\n";
+
+        continue;
+    }
+
+    echo $label,
+        '=',
+        $row['scope'],
+        ':',
+        $row['reason'],
+        ':',
+        $row['source_outbound_message_id'],
+        "\n";
+}
+PHP
+)"
+
+printf '%s\n' "$SUPPRESSION"
+
+grep -Fxq 'SUCCESS=NONE' <<<"$SUPPRESSION" \
+    || fail "successful recipient was unexpectedly suppressed"
+
+grep -Fxq 'TEMPFAIL=NONE' <<<"$SUPPRESSION" \
+    || fail "temporary failure was unexpectedly suppressed"
+
+grep -Fxq "BOUNCE=global:hard_bounce:$OUTBOUND_ID" <<<"$SUPPRESSION" \
+    || fail "hard bounce did not create the expected global suppression"
+
+pass "hard bounce automatically creates a workspace-global suppression"
 
 echo
 echo "OUTBOUND_ID=$OUTBOUND_ID"

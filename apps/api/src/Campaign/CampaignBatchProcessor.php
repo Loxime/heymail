@@ -6,6 +6,7 @@ namespace App\Campaign;
 
 use App\Mail\OutboundEmailPayload;
 use App\Mail\OutboundMessageSubmissionService;
+use App\Suppression\EmailSuppressionService;
 use App\Template\EmailTemplateRenderer;
 use DateTimeImmutable;
 use DateTimeZone;
@@ -22,6 +23,7 @@ final readonly class CampaignBatchProcessor
         private CampaignQuotaLimiter $quotaLimiter,
         private EmailTemplateRenderer $renderer,
         private OutboundMessageSubmissionService $submissionService,
+        private EmailSuppressionService $suppressions,
     ) {
     }
 
@@ -193,28 +195,63 @@ SQL,
             $end - 1,
         );
 
-        $reservation = $this->quotaLimiter->reserve(
-            $workspaceId,
-            $campaignId,
-            $indexes,
+        $sourceListId = filter_var(
+            $row['source_list_id'] ?? null,
+            FILTER_VALIDATE_INT,
+            [
+                'options' => [
+                    'min_range' => 1,
+                ],
+            ],
         );
 
-        if ($reservation['indexes'] === []) {
-            $this->connection->update(
-                'campaign',
-                [
-                    'status' => 'ready',
-                    'last_error' => sprintf(
-                        'Campaign hourly quota exhausted; retry after %d seconds.',
-                        $reservation['retryAfter'] ?? 1,
-                    ),
-                    'updated_at' => $now->format('Y-m-d H:i:s'),
-                ],
-                ['id' => $campaignId],
+        if (!is_int($sourceListId)) {
+            $sourceListId = null;
+        }
+
+        $suppressedByIndex = [];
+        $sendIndexes = [];
+
+        foreach ($indexes as $index) {
+            $recipient = $recipients[$index] ?? null;
+
+            if (
+                !is_array($recipient)
+                || !is_string($recipient['email'] ?? null)
+            ) {
+                throw new RuntimeException(
+                    'Campaign recipient snapshot is invalid.',
+                );
+            }
+
+            $suppression = $this->suppressions->match(
+                $workspaceId,
+                $recipient['email'],
+                $sourceListId,
             );
 
-            return true;
+            if ($suppression !== null) {
+                $suppressedByIndex[$index] = $suppression;
+            } else {
+                $sendIndexes[] = $index;
+            }
         }
+
+        $reservation = $sendIndexes === []
+            ? [
+                'indexes' => [],
+                'retryAfter' => null,
+            ]
+            : $this->quotaLimiter->reserve(
+                $workspaceId,
+                $campaignId,
+                $sendIndexes,
+            );
+
+        $reservedIndexes = array_fill_keys(
+            $reservation['indexes'],
+            true,
+        );
 
         $this->connection->update(
             'campaign',
@@ -226,7 +263,7 @@ SQL,
             ['id' => $campaignId],
         );
 
-        foreach ($reservation['indexes'] as $index) {
+        foreach ($indexes as $index) {
             $currentStatus = (string) $this->connection->fetchOne(
                 'SELECT status FROM campaign WHERE id = :id',
                 ['id' => $campaignId],
@@ -245,6 +282,56 @@ SQL,
                 throw new RuntimeException(
                     'Campaign recipient snapshot is invalid.',
                 );
+            }
+
+            if (isset($suppressedByIndex[$index])) {
+                $suppression = $suppressedByIndex[$index];
+
+                $this->connection->executeStatement(
+                    <<<'SQL'
+INSERT INTO campaign_recipient_skip (
+    campaign_id,
+    recipient_index,
+    suppression_id,
+    reason,
+    created_at
+)
+VALUES (
+    :campaign_id,
+    :recipient_index,
+    :suppression_id,
+    :reason,
+    :created_at
+)
+ON CONFLICT (
+    campaign_id,
+    recipient_index
+)
+DO NOTHING
+SQL,
+                    [
+                        'campaign_id' => $campaignId,
+                        'recipient_index' => $index,
+                        'suppression_id' => $suppression['id'],
+                        'reason' => $suppression['reason'],
+                        'created_at' => self::now()->format('Y-m-d H:i:s'),
+                    ],
+                );
+
+                $this->connection->update(
+                    'campaign',
+                    [
+                        'processed_count' => $index + 1,
+                        'updated_at' => self::now()->format('Y-m-d H:i:s'),
+                    ],
+                    ['id' => $campaignId],
+                );
+
+                continue;
+            }
+
+            if (!isset($reservedIndexes[$index])) {
+                break;
             }
 
             $variables = $recipient['variables'] ?? null;
@@ -379,7 +466,9 @@ SQL,
                     'last_error' => $reservation['retryAfter'] === null
                         ? null
                         : sprintf(
-                            'Campaign hourly quota partially exhausted; retry after %d seconds.',
+                            $reservation['indexes'] === []
+                                ? 'Campaign hourly quota exhausted; retry after %d seconds.'
+                                : 'Campaign hourly quota partially exhausted; retry after %d seconds.',
                             $reservation['retryAfter'],
                         ),
                     'updated_at' => self::now()->format('Y-m-d H:i:s'),

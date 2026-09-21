@@ -7,8 +7,10 @@ namespace App\Command;
 use App\Entity\OutboundMessage;
 use App\Entity\OutboundMessageEvent;
 use App\Entity\OutboundMessagePayload;
+use App\Enum\OutboundMessageEventType;
 use App\Mail\DsnSpoolEvent;
 use App\Mail\OutboundMessagePayloadCryptor;
+use App\Suppression\EmailSuppressionService;
 use Doctrine\ORM\EntityManagerInterface;
 use InvalidArgumentException;
 use LogicException;
@@ -29,6 +31,7 @@ final class ConsumeDsnSpoolCommand extends Command
     public function __construct(
         private readonly EntityManagerInterface $entityManager,
         private readonly OutboundMessagePayloadCryptor $payloadCryptor,
+        private readonly EmailSuppressionService $suppressions,
     ) {
         parent::__construct();
     }
@@ -358,7 +361,7 @@ final class ConsumeDsnSpoolCommand extends Command
                 return;
             }
 
-            $recipientAllowed = false;
+            $matchedRecipient = null;
 
             foreach ($payload->to as $recipient) {
                 $expectedHash = hash(
@@ -374,13 +377,14 @@ final class ConsumeDsnSpoolCommand extends Command
                         $event->recipientHash,
                     )
                 ) {
-                    $recipientAllowed = true;
+                    $matchedRecipient =
+                        $recipient->email;
 
                     break;
                 }
             }
 
-            if (!$recipientAllowed) {
+            if ($matchedRecipient === null) {
                 $this->entityManager->clear();
 
                 $this->quarantine(
@@ -390,6 +394,46 @@ final class ConsumeDsnSpoolCommand extends Command
                 );
 
                 return;
+            }
+
+            if (
+                $event->type
+                    === OutboundMessageEventType::BOUNCED
+                && str_starts_with(
+                    $event->smtpStatus,
+                    '5.',
+                )
+            ) {
+                $workspaceId =
+                    $message->getWorkspaceId();
+
+                if (
+                    !is_int($workspaceId)
+                    || $workspaceId < 1
+                ) {
+                    $this->entityManager->clear();
+
+                    $this->quarantine(
+                        $path,
+                        'rejected',
+                        $output,
+                    );
+
+                    return;
+                }
+
+                $this->suppressions->suppressGlobal(
+                    workspaceId:
+                        $workspaceId,
+                    email:
+                        $matchedRecipient,
+                    reason:
+                        'hard_bounce',
+                    sourceOutboundMessageId:
+                        $event->messageId,
+                    sourceEventId:
+                        $event->sourceEventId,
+                );
             }
 
             try {

@@ -6,8 +6,10 @@ namespace App\Command;
 
 use App\Entity\OutboundMessage;
 use App\Entity\OutboundMessageEvent;
+use App\Enum\OutboundMessageEventType;
 use App\Mail\PostfixDeliveryFeedback;
 use App\Mail\PostfixDeliveryLogParser;
+use App\Suppression\EmailSuppressionService;
 use Doctrine\ORM\EntityManagerInterface;
 use LogicException;
 use RuntimeException;
@@ -27,6 +29,7 @@ final class ObservePostfixDeliveryCommand extends Command
     public function __construct(
         private readonly EntityManagerInterface $entityManager,
         private readonly PostfixDeliveryLogParser $parser,
+        private readonly EmailSuppressionService $suppressions,
     ) {
         parent::__construct();
     }
@@ -216,6 +219,37 @@ final class ObservePostfixDeliveryCommand extends Command
             $this->entityManager->clear();
 
             return;
+        }
+
+        if (
+            $feedback->type
+                === OutboundMessageEventType::BOUNCED
+            && str_starts_with(
+                $feedback->smtpStatus,
+                '5.',
+            )
+        ) {
+            $workspaceId =
+                $message->getWorkspaceId();
+
+            if (
+                !is_int($workspaceId)
+                || $workspaceId < 1
+            ) {
+                throw new RuntimeException(
+                    'Bounced message has no valid workspace.',
+                );
+            }
+
+            $this->suppressions->suppressGlobal(
+                workspaceId: $workspaceId,
+                email: $feedback->recipient,
+                reason: 'hard_bounce',
+                sourceOutboundMessageId:
+                    $feedback->outboundMessageId,
+                sourceEventId:
+                    $feedback->sourceEventId,
+            );
         }
 
         try {

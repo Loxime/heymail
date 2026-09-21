@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace App\Controller;
 
 use App\Campaign\CampaignSnapshotCipher;
+use App\Suppression\EmailSuppressionService;
 use App\Console\ConsoleAuthentication;
 use App\Template\EmailTemplateRenderer;
 use DateTimeImmutable;
@@ -28,6 +29,7 @@ final readonly class ConsoleCampaignController
         private Connection $connection,
         private EmailTemplateRenderer $renderer,
         private CampaignSnapshotCipher $snapshotCipher,
+        private EmailSuppressionService $suppressions,
     ) {
     }
 
@@ -232,6 +234,18 @@ final readonly class ConsoleCampaignController
 
             $recipients = [];
             foreach ($contacts as $contact) {
+                $email = (string) $contact['email'];
+
+                if (
+                    $this->suppressions->match(
+                        $workspaceId,
+                        $email,
+                        $listId,
+                    ) !== null
+                ) {
+                    continue;
+                }
+
                 $custom = self::decodeObject($contact['custom_fields'] ?? '{}');
                 $name = $contact['name'] === null ? null : (string) $contact['name'];
                 $values = [
@@ -259,6 +273,16 @@ final readonly class ConsoleCampaignController
                     'name' => $name,
                     'variables' => $selected,
                 ];
+            }
+
+            if ($recipients === []) {
+                $this->connection->rollBack();
+
+                return self::error(
+                    'campaign_audience_suppressed',
+                    'Every campaign recipient is suppressed.',
+                    Response::HTTP_CONFLICT,
+                );
             }
 
             $encrypted = $this->snapshotCipher->encrypt(
