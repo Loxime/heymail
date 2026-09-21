@@ -31,7 +31,13 @@ import type {
   ConsoleEmailTemplateHistoryResponse,
   ConsoleEmailTemplateListResponse,
   ConsoleEmailTemplateRenderResponse,
+  ConsoleVisualEmailDocument,
 } from '../../lib/api/types'
+import {
+  defaultVisualDocument,
+  VisualEmailEditor,
+  visualDocumentReady,
+} from './VisualEmailEditor'
 
 function previewDocument(
   html: string,
@@ -58,6 +64,12 @@ export function TemplatesPage() {
   const [subject, setSubject] = useState('')
   const [textBody, setTextBody] = useState('')
   const [htmlBody, setHtmlBody] = useState('')
+  const [editorMode, setEditorMode] =
+    useState<'visual' | 'html'>('visual')
+  const [visualDocument, setVisualDocument] =
+    useState<ConsoleVisualEmailDocument>(
+      () => defaultVisualDocument(),
+    )
   const [variables, setVariables] =
     useState<Record<string, string>>({})
   const [preview, setPreview] =
@@ -97,6 +109,15 @@ export function TemplatesPage() {
     setSubject(selected.subject)
     setTextBody(selected.text ?? '')
     setHtmlBody(selected.html ?? '')
+    setEditorMode(
+      selected.visual
+        ? 'visual'
+        : 'html',
+    )
+    setVisualDocument(
+      selected.visual
+        ?? defaultVisualDocument(),
+    )
     setVariables(
       Object.fromEntries(
         selected.variables.map(
@@ -140,19 +161,32 @@ export function TemplatesPage() {
     }
   }
 
+  const contentPayload = () => ({
+    subject,
+    text: textBody === ''
+      ? null
+      : textBody,
+    html:
+      editorMode === 'visual'
+        ? null
+        : (
+            htmlBody === ''
+              ? null
+              : htmlBody
+          ),
+    visual:
+      editorMode === 'visual'
+        ? visualDocument
+        : null,
+  })
+
   const create = useMutation({
     mutationFn: () =>
       apiPost<ConsoleEmailTemplate>(
         '/console/templates',
         {
           name: name.trim(),
-          subject,
-          text: textBody === ''
-            ? null
-            : textBody,
-          html: htmlBody === ''
-            ? null
-            : htmlBody,
+          ...contentPayload(),
         },
       ),
     onSuccess: async (created) => {
@@ -177,15 +211,7 @@ export function TemplatesPage() {
 
       return apiPost<ConsoleEmailTemplate>(
         `/console/templates/${selected.id}/versions`,
-        {
-          subject,
-          text: textBody === ''
-            ? null
-            : textBody,
-          html: htmlBody === ''
-            ? null
-            : htmlBody,
-        },
+        contentPayload(),
       )
     },
     onSuccess: async () => {
@@ -291,6 +317,10 @@ export function TemplatesPage() {
                 setSubject('')
                 setTextBody('')
                 setHtmlBody('')
+                setEditorMode('visual')
+                setVisualDocument(
+                  defaultVisualDocument(),
+                )
                 setPreview(null)
               }}
               type="button"
@@ -398,37 +428,113 @@ export function TemplatesPage() {
               />
             </label>
 
-            <div className="send-content-grid">
-              <label className="field">
-                <span>Text body</span>
-                <textarea
-                  onChange={(event) =>
-                    setTextBody(event.target.value)
+            <div className="template-editor-mode">
+              <div className="template-editor-mode__buttons">
+                <button
+                  className={
+                    editorMode === 'visual'
+                      ? 'copy-button copy-button--active'
+                      : 'copy-button'
                   }
-                  rows={12}
-                  value={textBody}
-                />
-              </label>
+                  onClick={() =>
+                    setEditorMode('visual')
+                  }
+                  type="button"
+                >
+                  Visual
+                </button>
 
-              <label className="field">
-                <span>HTML body</span>
-                <textarea
-                  onChange={(event) =>
-                    setHtmlBody(event.target.value)
+                <button
+                  className={
+                    editorMode === 'html'
+                      ? 'copy-button copy-button--active'
+                      : 'copy-button'
                   }
-                  rows={12}
-                  value={htmlBody}
-                />
-              </label>
+                  onClick={() =>
+                    setEditorMode('html')
+                  }
+                  type="button"
+                >
+                  HTML
+                </button>
+              </div>
+
+              <small>
+                Visual mode stores structured blocks and
+                lets the API generate the send HTML.
+                Switching modes does not convert unsaved
+                edits.
+              </small>
             </div>
+
+            {editorMode === 'visual'
+              ? (
+                  <>
+                    <VisualEmailEditor
+                      document={visualDocument}
+                      onChange={setVisualDocument}
+                    />
+
+                    <label className="field">
+                      <span>Text fallback</span>
+                      <textarea
+                        onChange={(event) =>
+                          setTextBody(
+                            event.target.value,
+                          )
+                        }
+                        rows={7}
+                        value={textBody}
+                      />
+                      <small>
+                        Optional plain-text alternative.
+                      </small>
+                    </label>
+                  </>
+                )
+              : (
+                  <div className="send-content-grid">
+                    <label className="field">
+                      <span>Text body</span>
+                      <textarea
+                        onChange={(event) =>
+                          setTextBody(
+                            event.target.value,
+                          )
+                        }
+                        rows={12}
+                        value={textBody}
+                      />
+                    </label>
+
+                    <label className="field">
+                      <span>HTML body</span>
+                      <textarea
+                        onChange={(event) =>
+                          setHtmlBody(
+                            event.target.value,
+                          )
+                        }
+                        rows={12}
+                        value={htmlBody}
+                      />
+                    </label>
+                  </div>
+                )}
 
             <button
               className="button button--primary template-save"
               disabled={
                 subject.trim() === ''
                 || (
-                  textBody === ''
-                  && htmlBody === ''
+                  editorMode === 'visual'
+                    ? !visualDocumentReady(
+                        visualDocument,
+                      )
+                    : (
+                        textBody === ''
+                        && htmlBody === ''
+                      )
                 )
                 || (
                   selected === null

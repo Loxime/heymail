@@ -232,6 +232,60 @@ export interface ConsoleApiCredentialSecretResponse {
   secret: string
 }
 
+export type ConsoleVisualEmailAlignment =
+  | 'left'
+  | 'center'
+  | 'right'
+
+export interface ConsoleVisualEmailTextBlock {
+  id: string
+  type: 'text'
+  text: string
+  align: ConsoleVisualEmailAlignment
+}
+
+export interface ConsoleVisualEmailImageBlock {
+  id: string
+  type: 'image'
+  url: string
+  alt: string
+  align: ConsoleVisualEmailAlignment
+}
+
+export interface ConsoleVisualEmailButtonBlock {
+  id: string
+  type: 'button'
+  label: string
+  url: string
+  align: ConsoleVisualEmailAlignment
+}
+
+export interface ConsoleVisualEmailColumnsBlock {
+  id: string
+  type: 'columns'
+  columns: [
+    {
+      text: string
+      align: ConsoleVisualEmailAlignment
+    },
+    {
+      text: string
+      align: ConsoleVisualEmailAlignment
+    },
+  ]
+}
+
+export type ConsoleVisualEmailBlock =
+  | ConsoleVisualEmailTextBlock
+  | ConsoleVisualEmailImageBlock
+  | ConsoleVisualEmailButtonBlock
+  | ConsoleVisualEmailColumnsBlock
+
+export interface ConsoleVisualEmailDocument {
+  version: 1
+  blocks: ConsoleVisualEmailBlock[]
+}
+
 export interface ConsoleEmailTemplate {
   id: number
   name: string
@@ -239,6 +293,7 @@ export interface ConsoleEmailTemplate {
   subject: string
   text: string | null
   html: string | null
+  visual: ConsoleVisualEmailDocument | null
   variables: string[]
   createdAt: string
   updatedAt: string
@@ -255,6 +310,7 @@ export interface ConsoleEmailTemplateVersion {
   subject: string
   text: string | null
   html: string | null
+  visual: ConsoleVisualEmailDocument | null
   variables: string[]
   createdAt: string
 }
