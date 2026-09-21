@@ -241,6 +241,91 @@ export function DashboardPage() {
         </section>
       </div>
 
+      <section className="panel recipient-domains-panel">
+        <header className="panel__header">
+          <div>
+            <h2>
+              Recipient domains
+            </h2>
+
+            <p>
+              Delivery outcomes grouped
+              by recipient domain.
+            </p>
+          </div>
+        </header>
+
+        {data.recipientDomains.length === 0
+          ? (
+            <div className="table-loading">
+              No recipient-domain delivery
+              data yet.
+            </div>
+          )
+          : (
+            <div className="table-scroll">
+              <table className="data-table recipient-domains-table">
+                <thead>
+                  <tr>
+                    <th>Domain</th>
+                    <th>Delivered</th>
+                    <th>Tempfail</th>
+                    <th>Bounced</th>
+                    <th>Delivery rate</th>
+                  </tr>
+                </thead>
+
+                <tbody>
+                  {data.recipientDomains.map(
+                    (domain) => (
+                      <tr
+                        key={
+                          domain.domain
+                          ?? 'historical-unknown'
+                        }
+                      >
+                        <td>
+                          <span
+                            className={
+                              domain.domain === null
+                                ? 'recipient-domain recipient-domain--unknown'
+                                : 'recipient-domain'
+                            }
+                          >
+                            {domain.domain
+                              ?? 'Historical / unknown'}
+                          </span>
+                        </td>
+
+                        <td>
+                          {domain.delivered
+                            .toLocaleString()}
+                        </td>
+
+                        <td>
+                          {domain.tempfail
+                            .toLocaleString()}
+                        </td>
+
+                        <td>
+                          {domain.bounced
+                            .toLocaleString()}
+                        </td>
+
+                        <td>
+                          {formatPercent(
+                            domain.deliveryRate,
+                          )}
+                        </td>
+                      </tr>
+                    ),
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
+      </section>
+
       <section className="panel">
         <header className="panel__header panel__header--row">
           <div>
