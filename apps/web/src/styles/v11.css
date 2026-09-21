@@ -912,6 +912,43 @@
   padding: 18px;
 }
 
+.campaign-tracking-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+
+  padding: 11px 12px;
+
+  border: 1px solid var(--hm-border);
+  border-radius: 9px;
+
+  cursor: pointer;
+}
+
+.campaign-tracking-option input {
+  width: 15px;
+  height: 15px;
+  margin: 2px 0 0;
+
+  accent-color: var(--hm-primary);
+}
+
+.campaign-tracking-option > span {
+  display: grid;
+  gap: 3px;
+}
+
+.campaign-tracking-option strong {
+  color: var(--hm-text);
+  font-size: 11px;
+}
+
+.campaign-tracking-option small {
+  color: var(--hm-text-muted);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
 .campaign-control {
   margin-bottom: 18px;
 }

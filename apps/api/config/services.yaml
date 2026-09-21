@@ -91,6 +91,11 @@ services:
             $secret: '%kernel.secret%'
             $publicOrigin: '%env(string:HEYMAIL_PUBLIC_API_ORIGIN)%'
 
+    App\Tracking\TrackingTokenCodec:
+        arguments:
+            $secret: '%kernel.secret%'
+            $publicOrigin: '%env(string:HEYMAIL_PUBLIC_API_ORIGIN)%'
+
     App\Api\ApiCredentials:
         arguments:
             $apiKeyFile: '%env(string:HEYMAIL_API_KEY_FILE)%'

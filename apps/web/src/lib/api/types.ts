@@ -341,6 +341,7 @@ export interface ConsoleCampaign {
   templateId: number | null
   listId: number | null
   status: ConsoleCampaignStatus
+  trackingEnabled: boolean
   scheduledFor: string | null
   snapshotAt: string | null
   templateVersion: number | null

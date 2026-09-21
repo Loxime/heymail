@@ -83,6 +83,8 @@ export function CampaignsPage() {
     useState('')
   const [listId, setListId] =
     useState('')
+  const [trackingEnabled, setTrackingEnabled] =
+    useState(false)
   const [scheduledFor, setScheduledFor] =
     useState('')
   const [variablesRaw, setVariablesRaw] =
@@ -166,11 +168,13 @@ export function CampaignsPage() {
           senderId: Number(senderId),
           templateId: Number(templateId),
           listId: Number(listId),
+          trackingEnabled,
         },
       ),
     onSuccess: async (created) => {
       setSelectedId(created.id)
       setName('')
+      setTrackingEnabled(false)
       setError(null)
       await refresh()
     },
@@ -494,6 +498,29 @@ export function CampaignsPage() {
               </select>
             </label>
 
+            <label className="campaign-tracking-option">
+              <input
+                checked={trackingEnabled}
+                onChange={(event) =>
+                  setTrackingEnabled(
+                    event.target.checked,
+                  )
+                }
+                type="checkbox"
+              />
+
+              <span>
+                <strong>
+                  Track opens and clicks
+                </strong>
+
+                <small>
+                  Optional. Only HTML campaign
+                  messages are instrumented.
+                </small>
+              </span>
+            </label>
+
             <button
               className="button button--primary"
               disabled={
@@ -523,6 +550,10 @@ export function CampaignsPage() {
                 <h2>{selected.name}</h2>
                 <p>
                   Status: {selected.status}
+                  {' · Tracking '}
+                  {selected.trackingEnabled
+                    ? 'on'
+                    : 'off'}
                 </p>
               </div>
 

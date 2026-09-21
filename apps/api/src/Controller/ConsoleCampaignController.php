@@ -10,6 +10,7 @@ use App\Template\EmailTemplateRenderer;
 use DateTimeImmutable;
 use DateTimeZone;
 use Doctrine\DBAL\Connection;
+use Doctrine\DBAL\Types\Types;
 use InvalidArgumentException;
 use JsonException;
 use RuntimeException;
@@ -42,7 +43,7 @@ final readonly class ConsoleCampaignController
         }
 
         $rows = $this->connection->fetchAllAssociative(
-            'SELECT id,name,sender_identity_id,template_id,source_list_id,status,scheduled_for,snapshot_at,template_version,recipient_count,processed_count,paused_at,completed_at,last_error,created_at,updated_at
+            'SELECT id,name,sender_identity_id,template_id,source_list_id,status,tracking_enabled,scheduled_for,snapshot_at,template_version,recipient_count,processed_count,paused_at,completed_at,last_error,created_at,updated_at
              FROM campaign WHERE workspace_id = :workspace_id ORDER BY id DESC',
             ['workspace_id' => $workspaceId],
         );
@@ -63,10 +64,17 @@ final readonly class ConsoleCampaignController
             return $payload;
         }
 
-        if (array_keys($payload) !== ['name','senderId','templateId','listId']) {
+        $keys = array_keys($payload);
+        $allowed = ['name','senderId','templateId','listId','trackingEnabled'];
+        $required = ['name','senderId','templateId','listId'];
+
+        if (
+            array_diff($keys, $allowed) !== []
+            || array_diff($required, $keys) !== []
+        ) {
             return self::error(
                 'invalid_campaign',
-                'Expected name, senderId, templateId and listId.',
+                'Expected name, senderId, templateId, listId and optional trackingEnabled.',
                 Response::HTTP_UNPROCESSABLE_ENTITY,
             );
         }
@@ -76,6 +84,13 @@ final readonly class ConsoleCampaignController
             $senderId = self::requiredId($payload['senderId'], 'senderId');
             $templateId = self::requiredId($payload['templateId'], 'templateId');
             $listId = self::requiredId($payload['listId'], 'listId');
+            $trackingEnabled = $payload['trackingEnabled'] ?? false;
+
+            if (!is_bool($trackingEnabled)) {
+                throw new InvalidArgumentException(
+                    'trackingEnabled must be a boolean.',
+                );
+            }
         } catch (InvalidArgumentException $e) {
             return self::error('invalid_campaign', $e->getMessage(), Response::HTTP_UNPROCESSABLE_ENTITY);
         }
@@ -93,9 +108,9 @@ final readonly class ConsoleCampaignController
         $now = self::now()->format('Y-m-d H:i:s');
         $id = self::positiveId($this->connection->fetchOne(
             "INSERT INTO campaign (
-                workspace_id,name,sender_identity_id,template_id,source_list_id,status,created_at,updated_at
+                workspace_id,name,sender_identity_id,template_id,source_list_id,status,tracking_enabled,created_at,updated_at
              ) VALUES (
-                :workspace_id,:name,:sender_id,:template_id,:list_id,'draft',:created_at,:updated_at
+                :workspace_id,:name,:sender_id,:template_id,:list_id,'draft',:tracking_enabled,:created_at,:updated_at
              ) RETURNING id",
             [
                 'workspace_id' => $workspaceId,
@@ -103,8 +118,13 @@ final readonly class ConsoleCampaignController
                 'sender_id' => $senderId,
                 'template_id' => $templateId,
                 'list_id' => $listId,
+                'tracking_enabled' => $trackingEnabled,
                 'created_at' => $now,
                 'updated_at' => $now,
+            ],
+            [
+                'tracking_enabled'
+                    => Types::BOOLEAN,
             ],
         ));
 
@@ -146,7 +166,7 @@ final readonly class ConsoleCampaignController
 
         try {
             $campaign = $this->connection->fetchAssociative(
-                'SELECT sender_identity_id,template_id,source_list_id,status
+                'SELECT sender_identity_id,template_id,source_list_id,status,tracking_enabled
                  FROM campaign
                  WHERE id = :id AND workspace_id = :workspace_id FOR UPDATE',
                 ['id' => $campaignId, 'workspace_id' => $workspaceId],
@@ -290,6 +310,7 @@ final readonly class ConsoleCampaignController
                 $campaignId,
                 [
                     'sender' => ['email' => (string) $sender['email']],
+                    'trackingEnabled' => (bool) $campaign['tracking_enabled'],
                     'template' => [
                         'version' => (int) $template['version'],
                         'subject' => (string) $template['subject'],
@@ -399,7 +420,7 @@ final readonly class ConsoleCampaignController
     private function campaign(int $workspaceId, int $campaignId): array
     {
         $row = $this->connection->fetchAssociative(
-            'SELECT id,name,sender_identity_id,template_id,source_list_id,status,scheduled_for,snapshot_at,template_version,recipient_count,processed_count,paused_at,completed_at,last_error,created_at,updated_at
+            'SELECT id,name,sender_identity_id,template_id,source_list_id,status,tracking_enabled,scheduled_for,snapshot_at,template_version,recipient_count,processed_count,paused_at,completed_at,last_error,created_at,updated_at
              FROM campaign WHERE id = :id AND workspace_id = :workspace_id',
             ['id' => $campaignId, 'workspace_id' => $workspaceId],
         );
@@ -421,6 +442,7 @@ final readonly class ConsoleCampaignController
             'templateId' => self::positiveId($row['template_id']),
             'listId' => self::positiveId($row['source_list_id']),
             'status' => (string) $row['status'],
+            'trackingEnabled' => (bool) $row['tracking_enabled'],
             'scheduledFor' => $row['scheduled_for'] === null ? null : self::timestamp($row['scheduled_for']),
             'snapshotAt' => $row['snapshot_at'] === null ? null : self::timestamp($row['snapshot_at']),
             'templateVersion' => $row['template_version'] === null ? null : (int) $row['template_version'],

@@ -9,6 +9,7 @@ use App\Mail\OutboundMessageSubmissionService;
 use App\Suppression\EmailSuppressionService;
 use App\Suppression\UnsubscribeTokenCodec;
 use App\Template\EmailTemplateRenderer;
+use App\Tracking\TrackingHtmlInstrumenter;
 use DateTimeImmutable;
 use DateTimeZone;
 use Doctrine\DBAL\Connection;
@@ -26,6 +27,7 @@ final readonly class CampaignBatchProcessor
         private OutboundMessageSubmissionService $submissionService,
         private EmailSuppressionService $suppressions,
         private UnsubscribeTokenCodec $unsubscribeTokens,
+        private TrackingHtmlInstrumenter $tracking,
     ) {
     }
 
@@ -173,9 +175,11 @@ SQL,
         $recipients = $snapshot['recipients'] ?? null;
         $template = $snapshot['template'] ?? null;
         $sender = $snapshot['sender'] ?? null;
+        $trackingEnabled = $snapshot['trackingEnabled'] ?? false;
 
         if (
-            !is_array($recipients)
+            !is_bool($trackingEnabled)
+            || !is_array($recipients)
             || !array_is_list($recipients)
             || count($recipients) !== $recipientCount
             || !is_array($template)
@@ -368,6 +372,17 @@ SQL,
                     $template['html'] ?? null,
                     $variables,
                 );
+
+            if (
+                $trackingEnabled
+                && $renderedHtml !== null
+            ) {
+                $renderedHtml = $this->tracking->instrument(
+                    $renderedHtml,
+                    $campaignId,
+                    $index,
+                );
+            }
 
             if ($renderedText !== null) {
                 $renderedText .= sprintf(
