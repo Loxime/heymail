@@ -7,6 +7,7 @@ namespace App\Campaign;
 use App\Mail\OutboundEmailPayload;
 use App\Mail\OutboundMessageSubmissionService;
 use App\Suppression\EmailSuppressionService;
+use App\Suppression\UnsubscribeTokenCodec;
 use App\Template\EmailTemplateRenderer;
 use DateTimeImmutable;
 use DateTimeZone;
@@ -24,6 +25,7 @@ final readonly class CampaignBatchProcessor
         private EmailTemplateRenderer $renderer,
         private OutboundMessageSubmissionService $submissionService,
         private EmailSuppressionService $suppressions,
+        private UnsubscribeTokenCodec $unsubscribeTokens,
     ) {
     }
 
@@ -346,6 +348,45 @@ SQL,
                 );
             }
 
+            $unsubscribeUrl =
+                $this->unsubscribeTokens->url(
+                    $workspaceId,
+                    $sourceListId,
+                    $recipient['email'],
+                );
+
+            $renderedText =
+                self::renderNullable(
+                    $this->renderer,
+                    $template['text'] ?? null,
+                    $variables,
+                );
+
+            $renderedHtml =
+                self::renderNullable(
+                    $this->renderer,
+                    $template['html'] ?? null,
+                    $variables,
+                );
+
+            if ($renderedText !== null) {
+                $renderedText .= sprintf(
+                    "\n\nUnsubscribe: %s",
+                    $unsubscribeUrl,
+                );
+            }
+
+            if ($renderedHtml !== null) {
+                $renderedHtml .= sprintf(
+                    '<p style="font-size:12px;color:#667085"><a href="%s">Unsubscribe</a></p>',
+                    htmlspecialchars(
+                        $unsubscribeUrl,
+                        ENT_QUOTES | ENT_SUBSTITUTE,
+                        'UTF-8',
+                    ),
+                );
+            }
+
             $payload = OutboundEmailPayload::fromArray([
                 'from' => [
                     'email' => $sender['email'],
@@ -369,17 +410,11 @@ SQL,
                     ),
                     $variables,
                 ),
-                'text' => self::renderNullable(
-                    $this->renderer,
-                    $template['text'] ?? null,
-                    $variables,
-                ),
-                'html' => self::renderNullable(
-                    $this->renderer,
-                    $template['html'] ?? null,
-                    $variables,
-                ),
-            ]);
+                'text' => $renderedText,
+                'html' => $renderedHtml,
+            ])->withUnsubscribeUrl(
+                $unsubscribeUrl,
+            );
 
             $submission = $this->submissionService->submit(
                 sprintf(

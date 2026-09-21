@@ -91,6 +91,7 @@ services:
 
       HEYMAIL_SEND_QUOTA_PER_HOUR: ${HEYMAIL_SEND_QUOTA_PER_HOUR:-600}
 
+      HEYMAIL_PUBLIC_API_ORIGIN: ${HEYMAIL_API_URI}
       PAYLOAD_KEK_FILE: /run/secrets/payload_kek_v1
       WEBHOOK_KEK_FILE: /run/secrets/webhook_kek_v1
 
@@ -237,6 +238,7 @@ services:
       MAILER_DSN: "null://null"
       HEYMAIL_BOUNCE_DOMAIN: ${HEYMAIL_BOUNCE_DOMAIN}
       HEYMAIL_CAMPAIGN_QUOTA_PER_HOUR: ${HEYMAIL_CAMPAIGN_QUOTA_PER_HOUR:-600}
+      HEYMAIL_PUBLIC_API_ORIGIN: ${HEYMAIL_API_URI}
       PAYLOAD_KEK_FILE: /run/secrets/payload_kek_v1
 
       DB_HOST: database

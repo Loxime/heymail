@@ -3,6 +3,7 @@
 parameters:
     env(HEYMAIL_SEND_QUOTA_PER_HOUR): '600'
     env(HEYMAIL_CAMPAIGN_QUOTA_PER_HOUR): '600'
+    env(HEYMAIL_PUBLIC_API_ORIGIN): 'https://api.heymail.test:8443'
     env(HEYMAIL_BOUNCE_HMAC_KEY_FILE): '/run/secrets/bounce_hmac_key'
     env(HEYMAIL_PUBLIC_IPV4): '127.0.0.1'
     env(HEYMAIL_CONSOLE_DOMAIN): 'console.example.invalid'
@@ -84,6 +85,11 @@ services:
     App\Campaign\CampaignQuotaLimiter:
         arguments:
             $limitPerHour: '%env(int:HEYMAIL_CAMPAIGN_QUOTA_PER_HOUR)%'
+
+    App\Suppression\UnsubscribeTokenCodec:
+        arguments:
+            $secret: '%kernel.secret%'
+            $publicOrigin: '%env(string:HEYMAIL_PUBLIC_API_ORIGIN)%'
 
     App\Api\ApiCredentials:
         arguments:

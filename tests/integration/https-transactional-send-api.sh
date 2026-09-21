@@ -981,6 +981,13 @@ docker compose exec -T fake-mx-success \
 
 pass "HTTPS-created message reached fake MX with DKIM"
 
+if docker compose exec -T fake-mx-success     grep -aE '^List-Unsubscribe(-Post)?:'     /capture/last.eml     >/dev/null 2>&1
+then
+    fail "transactional mail unexpectedly contains campaign unsubscribe headers"
+fi
+
+pass "transactional mail does not receive campaign unsubscribe headers"
+
 echo
 echo "OUTBOUND_ID=$OUTBOUND_ID"
 echo "FINAL_STATUS=$FINAL_STATUS"

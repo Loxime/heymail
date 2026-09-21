@@ -69,6 +69,25 @@ final class SymfonyMailerOutboundMessageSubmitter implements
             );
         }
 
+        if ($payload->unsubscribeUrl !== null) {
+            $email
+                ->getHeaders()
+                ->addTextHeader(
+                    'List-Unsubscribe',
+                    sprintf(
+                        '<%s>',
+                        $payload->unsubscribeUrl,
+                    ),
+                );
+
+            $email
+                ->getHeaders()
+                ->addTextHeader(
+                    'List-Unsubscribe-Post',
+                    'List-Unsubscribe=One-Click',
+                );
+        }
+
         $email
             ->getHeaders()
             ->addIdHeader(

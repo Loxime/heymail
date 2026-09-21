@@ -352,6 +352,31 @@ export interface ConsoleCampaignPreviewResponse {
   html: string | null
 }
 
+
+export type ConsoleSuppressionScope =
+  | 'global'
+  | 'list'
+
+export type ConsoleSuppressionReason =
+  | 'manual'
+  | 'hard_bounce'
+  | 'unsubscribe'
+
+export interface ConsoleSuppression {
+  id: number
+  email: string
+  scope: ConsoleSuppressionScope
+  reason: ConsoleSuppressionReason
+  listId: number | null
+  sourceMessageId: number | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface ConsoleSuppressionListResponse {
+  items: ConsoleSuppression[]
+}
+
 export interface ConsoleProfileResponse {
   user: ConsoleUser
   stats: {

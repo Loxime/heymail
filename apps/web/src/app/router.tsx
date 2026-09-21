@@ -53,6 +53,9 @@ import {
 import {
   CampaignsPage,
 } from '../features/campaigns/CampaignsPage'
+import {
+  SuppressionsPage,
+} from '../features/suppressions/SuppressionsPage'
 
 export const router =
   createBrowserRouter([
@@ -91,6 +94,10 @@ export const router =
         {
           path: 'campaigns',
           element: <CampaignsPage />,
+        },
+        {
+          path: 'suppressions',
+          element: <SuppressionsPage />,
         },
         {
           path: 'domains',

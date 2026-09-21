@@ -187,7 +187,7 @@ final class OutboundEmailPayloadCipher
             );
         }
 
-        return OutboundEmailPayload::fromArray(
+        return OutboundEmailPayload::fromStoredArray(
             $decoded,
         );
     }

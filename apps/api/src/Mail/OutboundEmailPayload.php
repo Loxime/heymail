@@ -23,6 +23,7 @@ final readonly class OutboundEmailPayload
         public ?string $textPart = null,
         public ?string $htmlPart = null,
         public ?EmailAddress $replyTo = null,
+        public ?string $unsubscribeUrl = null,
     ) {
         self::assertRecipients($this->to);
         self::assertSubject($this->subject);
@@ -38,6 +39,30 @@ final readonly class OutboundEmailPayload
             self::MAX_HTML_BYTES,
             'HTML',
         );
+
+        if ($this->unsubscribeUrl !== null) {
+            if (
+                strlen($this->unsubscribeUrl) > 2048
+                || filter_var(
+                    $this->unsubscribeUrl,
+                    FILTER_VALIDATE_URL,
+                ) === false
+                || !str_starts_with(
+                    strtolower(
+                        $this->unsubscribeUrl,
+                    ),
+                    'https://',
+                )
+                || preg_match(
+                    '/[\x00-\x20\x7F]/',
+                    $this->unsubscribeUrl,
+                ) === 1
+            ) {
+                throw new InvalidArgumentException(
+                    'Invalid unsubscribe URL.',
+                );
+            }
+        }
 
         if (
             ($this->textPart === null || $this->textPart === '')
@@ -169,6 +194,56 @@ final readonly class OutboundEmailPayload
     }
 
     /**
+     * @param array<mixed, mixed> $data
+     */
+    public static function fromStoredArray(
+        array $data,
+    ): self {
+        $unsubscribeUrl =
+            $data['unsubscribeUrl']
+            ?? null;
+
+        if (
+            $unsubscribeUrl !== null
+            && !is_string($unsubscribeUrl)
+        ) {
+            throw new InvalidArgumentException(
+                'Outbound unsubscribe URL must be a string or null.',
+            );
+        }
+
+        unset(
+            $data['unsubscribeUrl'],
+        );
+
+        $payload = self::fromArray(
+            $data,
+        );
+
+        if ($unsubscribeUrl === null) {
+            return $payload;
+        }
+
+        return $payload->withUnsubscribeUrl(
+            $unsubscribeUrl,
+        );
+    }
+
+    public function withUnsubscribeUrl(
+        string $unsubscribeUrl,
+    ): self {
+        return new self(
+            from: $this->from,
+            to: $this->to,
+            subject: $this->subject,
+            textPart: $this->textPart,
+            htmlPart: $this->htmlPart,
+            replyTo: $this->replyTo,
+            unsubscribeUrl: $unsubscribeUrl,
+        );
+    }
+
+    /**
      * @return array{
      *     from: array{email: string, name?: string},
      *     to: list<array{email: string, name?: string}>,
@@ -180,7 +255,7 @@ final readonly class OutboundEmailPayload
      */
     public function toArray(): array
     {
-        return [
+        $data = [
             'from' => $this->from->toArray(),
             'to' => array_map(
                 static fn (
@@ -193,6 +268,13 @@ final readonly class OutboundEmailPayload
             'html' => $this->htmlPart,
             'replyTo' => $this->replyTo?->toArray(),
         ];
+
+        if ($this->unsubscribeUrl !== null) {
+            $data['unsubscribeUrl'] =
+                $this->unsubscribeUrl;
+        }
+
+        return $data;
     }
 
     /**
