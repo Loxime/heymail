@@ -397,6 +397,8 @@ services:
 
       OVH_DNS_ZONE: ${OVH_DNS_ZONE:?required}
       HEYMAIL_CONSOLE_DOMAIN: ${HEYMAIL_CONSOLE_DOMAIN:?required}
+      HEYMAIL_INBOUND_DOMAIN: ${HEYMAIL_INBOUND_DOMAIN:?required}
+      HEYMAIL_SRS_DOMAIN: ${HEYMAIL_SRS_DOMAIN:?required}
       HEYMAIL_BOUNCE_DOMAIN: ${HEYMAIL_BOUNCE_DOMAIN:?required}
       HEYMAIL_PUBLIC_IPV4: ${HEYMAIL_PUBLIC_IPV4:?required}
       OVH_APPLICATION_KEY_FILE: /run/secrets/ovh_application_key
@@ -595,6 +597,81 @@ services:
       start_period: 10s
 
 
+  inbound-ingress:
+    build:
+      context: .
+      dockerfile: docker/inbound-ingress/Dockerfile
+      args:
+        HEYMAIL_SMTP_HOSTNAME: ${HEYMAIL_SMTP_HOSTNAME:?required}
+        HEYMAIL_BOUNCE_DOMAIN: ${HEYMAIL_BOUNCE_DOMAIN:?required}
+        HEYMAIL_INBOUND_DOMAIN: ${HEYMAIL_INBOUND_DOMAIN:?required}
+        HEYMAIL_SRS_DOMAIN: ${HEYMAIL_SRS_DOMAIN:?required}
+
+    image: heymail-inbound-ingress:prod
+    restart: unless-stopped
+
+    environment:
+      HEYMAIL_BOUNCE_DOMAIN: ${HEYMAIL_BOUNCE_DOMAIN:?required}
+      HEYMAIL_INBOUND_DOMAIN: ${HEYMAIL_INBOUND_DOMAIN:?required}
+      HEYMAIL_SRS_DOMAIN: ${HEYMAIL_SRS_DOMAIN:?required}
+      HEYMAIL_BOUNCE_HMAC_KEY_FILE: /run/secrets/bounce_hmac_key
+      HEYMAIL_INBOUND_ALIASES_FILE: /run/secrets/inbound_aliases
+      HEYMAIL_INBOUND_SRS_SECRET_FILE: /run/secrets/inbound_srs_secret
+
+    secrets:
+      - bounce_hmac_key
+      - inbound_aliases
+      - inbound_srs_secret
+
+    ports:
+      - "0.0.0.0:25:25"
+
+    volumes:
+      - inbound_postfix_queue:/var/spool/postfix
+      - inbound_postfix_data:/var/lib/postfix
+      - inbound_postfix_logs:/var/log/postfix
+
+    networks:
+      - dsn_net
+      - filter_net
+      - smtp_egress
+
+    depends_on:
+      dsn-ingress:
+        condition: service_healthy
+
+      rspamd:
+        condition: service_healthy
+
+    read_only: true
+
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+      - /run:size=16m,mode=0755
+
+    security_opt:
+      - no-new-privileges:true
+
+    cap_drop:
+      - ALL
+
+    cap_add:
+      - SETUID
+      - SETGID
+      - DAC_OVERRIDE
+
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "/usr/local/bin/heymail-inbound-healthcheck"
+        ]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+      start_period: 10s
+
+
   dsn-loopback-proxy:
     build:
       context: .
@@ -607,7 +684,6 @@ services:
 
     ports:
       - "127.0.0.1:3025:3025"
-      - "0.0.0.0:25:3025"
 
     networks:
       - dsn_net
@@ -658,6 +734,15 @@ networks:
 
 volumes:
 
+  inbound_postfix_queue:
+    name: heymail_prod_inbound_postfix_queue
+
+  inbound_postfix_data:
+    name: heymail_prod_inbound_postfix_data
+
+  inbound_postfix_logs:
+    name: heymail_prod_inbound_postfix_logs
+
   dsn_postfix_queue:
     name: heymail_prod_dsn_postfix_queue
 
@@ -684,6 +769,12 @@ volumes:
 
 
 secrets:
+
+  inbound_aliases:
+    file: ./secrets/prod/inbound_aliases
+
+  inbound_srs_secret:
+    file: ./secrets/prod/inbound_srs_secret
 
   bounce_hmac_key:
     file: ./secrets/prod/bounce_hmac_key

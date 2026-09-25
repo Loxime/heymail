@@ -9,6 +9,8 @@ parameters:
     env(HEYMAIL_BOUNCE_HMAC_KEY_FILE): '/run/secrets/bounce_hmac_key'
     env(HEYMAIL_PUBLIC_IPV4): '127.0.0.1'
     env(HEYMAIL_CONSOLE_DOMAIN): 'console.example.invalid'
+    env(HEYMAIL_INBOUND_DOMAIN): 'mail.example.invalid'
+    env(HEYMAIL_SRS_DOMAIN): 'srs.mail.example.invalid'
 
     env(OVH_DNS_ZONE): 'example.invalid'
     env(OVH_APPLICATION_KEY_FILE): '/run/secrets/ovh_application_key'
@@ -89,6 +91,8 @@ services:
         arguments:
             $zone: '%env(string:OVH_DNS_ZONE)%'
             $consoleDomain: '%env(string:HEYMAIL_CONSOLE_DOMAIN)%'
+            $inboundDomain: '%env(string:HEYMAIL_INBOUND_DOMAIN)%'
+            $srsDomain: '%env(string:HEYMAIL_SRS_DOMAIN)%'
             $bounceDomain: '%env(string:HEYMAIL_BOUNCE_DOMAIN)%'
             $publicIpv4: '%env(string:HEYMAIL_PUBLIC_IPV4)%'
 

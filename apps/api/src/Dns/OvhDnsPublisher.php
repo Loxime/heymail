@@ -12,6 +12,8 @@ final class OvhDnsPublisher
 {
     private string $zone;
     private string $consoleDomain;
+    private string $inboundDomain;
+    private string $srsDomain;
     private string $bounceDomain;
     private string $publicIpv4;
 
@@ -20,6 +22,8 @@ final class OvhDnsPublisher
         private readonly OvhApiClient $client,
         string $zone,
         string $consoleDomain,
+        string $inboundDomain,
+        string $srsDomain,
         string $bounceDomain,
         string $publicIpv4,
     ) {
@@ -37,6 +41,20 @@ final class OvhDnsPublisher
                 )
             )->value;
 
+        $this->inboundDomain =
+            (
+                new DomainName(
+                    $inboundDomain,
+                )
+            )->value;
+
+        $this->srsDomain =
+            (
+                new DomainName(
+                    $srsDomain,
+                )
+            )->value;
+
         $this->bounceDomain =
             (
                 new DomainName(
@@ -51,6 +69,37 @@ final class OvhDnsPublisher
         ) {
             throw new RuntimeException(
                 'Console domain is outside managed zone.',
+            );
+        }
+
+        if (
+            !$this->isManagedDomain(
+                $this->inboundDomain,
+            )
+        ) {
+            throw new RuntimeException(
+                'Inbound domain is outside managed zone.',
+            );
+        }
+
+        if (
+            !$this->isManagedDomain(
+                $this->srsDomain,
+            )
+        ) {
+            throw new RuntimeException(
+                'SRS domain is outside managed zone.',
+            );
+        }
+
+        if (
+            $this->srsDomain
+            === $this->inboundDomain
+            || $this->srsDomain
+            === $this->bounceDomain
+        ) {
+            throw new RuntimeException(
+                'SRS domain must be dedicated.',
             );
         }
 
@@ -120,6 +169,122 @@ SQL
             'record'
                 => 'A '
                 . $this->consoleDomain,
+            'action' => $action,
+        ];
+
+        if ($action !== 'unchanged') {
+            $changed = true;
+        }
+
+        if (
+            $this->inboundDomain
+            !== $this->consoleDomain
+        ) {
+            $action =
+                $this->client
+                    ->syncARecord(
+                        $this->zone,
+                        $this->relativeName(
+                            $this->inboundDomain,
+                        ),
+                        $this->publicIpv4,
+                    );
+
+            $results[] = [
+                'record'
+                    => 'A '
+                    . $this->inboundDomain,
+                'action' => $action,
+            ];
+
+            if ($action !== 'unchanged') {
+                $changed = true;
+            }
+        }
+
+        $action =
+            $this->client
+                ->syncMxRecord(
+                    $this->zone,
+                    $this->relativeName(
+                        $this->inboundDomain,
+                    ),
+                    '10 '
+                    . $this->inboundDomain
+                    . '.',
+                );
+
+        $results[] = [
+            'record'
+                => 'MX '
+                . $this->inboundDomain,
+            'action' => $action,
+        ];
+
+        if ($action !== 'unchanged') {
+            $changed = true;
+        }
+
+        $action =
+            $this->client
+                ->syncARecord(
+                    $this->zone,
+                    $this->relativeName(
+                        $this->srsDomain,
+                    ),
+                    $this->publicIpv4,
+                );
+
+        $results[] = [
+            'record'
+                => 'A '
+                . $this->srsDomain,
+            'action' => $action,
+        ];
+
+        if ($action !== 'unchanged') {
+            $changed = true;
+        }
+
+        $action =
+            $this->client
+                ->syncMxRecord(
+                    $this->zone,
+                    $this->relativeName(
+                        $this->srsDomain,
+                    ),
+                    '10 '
+                    . $this->srsDomain
+                    . '.',
+                );
+
+        $results[] = [
+            'record'
+                => 'MX '
+                . $this->srsDomain,
+            'action' => $action,
+        ];
+
+        if ($action !== 'unchanged') {
+            $changed = true;
+        }
+
+        $action =
+            $this->client
+                ->syncTxtRecord(
+                    $this->zone,
+                    $this->relativeName(
+                        $this->srsDomain,
+                    ),
+                    'v=spf1 ip4:'
+                    . $this->publicIpv4
+                    . ' -all',
+                );
+
+        $results[] = [
+            'record'
+                => 'TXT '
+                . $this->srsDomain,
             'action' => $action,
         ];
 
