@@ -4,19 +4,22 @@ HeyMail is a self-hosted outbound email infrastructure project designed to be de
 
 ## Current state
 
-This archive represents the project **before the first structure commit**.
-No mail server, API, database or user interface has been implemented yet.
+HeyMail now contains the self-hosted mail platform used by the project:
 
-The repository currently establishes:
+- authenticated HTTPS transactional send API with mandatory idempotency;
+- PostgreSQL-backed encrypted payload persistence and immutable delivery events;
+- Postfix + Rspamd + DKIM outbound delivery;
+- workspaces, scoped API credentials, senders, templates, contacts, campaigns,
+  automations, tracking and suppressions;
+- authenticated bounce/DSN handling;
+- explicit inbound aliases with forwarding and SRS, without mailbox storage or
+  catch-all relay;
+- HeyMail Capture, a local Mailpit-based inbox with no normal Internet egress;
+- a PHP client that switches between local capture and the production HeyMail
+  API through environment configuration only.
 
-- the monorepo layout;
-- the future trust boundaries for Docker networks;
-- a strict `.gitignore` policy;
-- a safe `.env.example`;
-- the secret-storage policy;
-- the development journal structure;
-- the initial security documentation;
-- a pre-commit secret sanity check.
+The production v1.1 release remains isolated from v1.2 development until the
+v1.2 release gates and deployment procedure are completed.
 
 ## Planned components
 

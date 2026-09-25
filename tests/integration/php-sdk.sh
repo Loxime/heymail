@@ -186,6 +186,13 @@ INNER JOIN sending_domain sd
     ON sd.id = si.sending_domain_id
 WHERE sd.status = 'verified'
   AND sd.disabled_at IS NULL
+  AND sd.workspace_id = (
+      SELECT id
+      FROM workspace
+      WHERE name = 'HeyMail Legacy Workspace'
+      ORDER BY id ASC
+      LIMIT 1
+  )
 ORDER BY si.id DESC
 LIMIT 1
 SQL;
@@ -323,6 +330,12 @@ docker run \
     -e "SUBJECT=$SUBJECT" \
     -e "BODY=$BODY" \
     -e "IDEMPOTENCY_KEY=$IDEMPOTENCY_KEY" \
+    -e HEYMAIL_MODE=api \
+    -e HEYMAIL_BASE_URI=https://api.heymail.test:8443 \
+    -e HEYMAIL_API_KEY_FILE=/run/heymail/api_key \
+    -e HEYMAIL_API_SECRET_FILE=/run/heymail/api_secret \
+    -e "HEYMAIL_DEFAULT_FROM=$SENDER_EMAIL" \
+    -e HEYMAIL_CA_FILE=/run/heymail/ca.pem \
     -v "$ROOT_DIR/packages/heymail-php:/sdk:ro" \
     -v "$ROOT_DIR/secrets/api_key:/run/heymail/api_key:ro" \
     -v "$ROOT_DIR/secrets/api_secret:/run/heymail/api_secret:ro" \
@@ -375,21 +388,7 @@ $idempotencyKey = (string) getenv(
     'IDEMPOTENCY_KEY',
 );
 
-$hub = new HeyMailHub(
-    baseUri: 'https://api.heymail.test:8443',
-    apiKey: trim(
-        file_get_contents(
-            '/run/heymail/api_key',
-        ),
-    ),
-    apiSecret: trim(
-        file_get_contents(
-            '/run/heymail/api_secret',
-        ),
-    ),
-    defaultFrom: $sender,
-    caFile: '/run/heymail/ca.pem',
-);
+$hub = HeyMailHub::fromEnvironment();
 
 $first = $hub
     ->message()
