@@ -24,6 +24,8 @@ Commands:
 heymail-capture up
 heymail-capture status
 heymail-capture open
+heymail-capture dsn host
+heymail-capture dsn docker
 heymail-capture logs
 heymail-capture down
 ```
@@ -39,6 +41,20 @@ A host application can use:
 ```dotenv
 MAILER_DSN=smtp://127.0.0.1:1025
 ```
+
+For scripts and application setup, the CLI exposes the canonical values:
+
+```bash
+heymail-capture dsn host
+# smtp://127.0.0.1:1025
+
+heymail-capture dsn docker
+# smtp://capture:1025
+```
+
+The capture inbox supports normal SMTP MIME messages, including multipart
+text/HTML newsletters and attachments. The integration gate verifies all three
+and checks Mailpit's rendered text/HTML preview endpoints.
 
 ## Inject into any Docker Compose project
 

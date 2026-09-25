@@ -217,4 +217,145 @@ done
     || fail "SMTP message was not captured"
 
 echo "PASS: SMTP mail captured locally"
+
+RICH_TOKEN="$(
+    openssl rand -hex 8
+)"
+RICH_SUBJECT="HeyMail Capture Rich MIME $RICH_TOKEN"
+PLAIN_TOKEN="plain-$RICH_TOKEN"
+HTML_TOKEN="html-$RICH_TOKEN"
+ATTACHMENT_TOKEN="attachment-$RICH_TOKEN"
+
+python3 \
+    - \
+    "$RICH_SUBJECT" \
+    "$PLAIN_TOKEN" \
+    "$HTML_TOKEN" \
+    "$ATTACHMENT_TOKEN" <<'PY'
+import smtplib
+import sys
+from email.message import EmailMessage
+
+subject, plain_token, html_token, attachment_token = sys.argv[1:]
+
+message = EmailMessage()
+message["From"] = "newsletter@heymail.test"
+message["To"] = "capture-recipient@example.test"
+message["Subject"] = subject
+message.set_content(f"Plain newsletter body {plain_token}\n")
+message.add_alternative(
+    "<!doctype html><html><body>"
+    f"<h1>HeyMail newsletter {html_token}</h1>"
+    "<p>This HTML must remain inside local capture.</p>"
+    "</body></html>",
+    subtype="html",
+)
+message.add_attachment(
+    (attachment_token + "\n").encode("utf-8"),
+    maintype="text",
+    subtype="plain",
+    filename="heymail-capture-proof.txt",
+)
+
+with smtplib.SMTP("127.0.0.1", 1025, timeout=5) as client:
+    client.send_message(message)
+PY
+
+RICH_JSON=""
+RICH_FOUND=false
+
+for _ in $(seq 1 20); do
+    RICH_JSON="$(
+        curl \
+            -fsS \
+            http://127.0.0.1:8025/api/v1/message/latest \
+            2>/dev/null \
+            || true
+    )"
+
+    if printf '%s' "$RICH_JSON" \
+        | python3 \
+            -c '
+import json
+import sys
+
+subject, plain_token, html_token = sys.argv[1:]
+
+try:
+    message = json.load(sys.stdin)
+except Exception:
+    raise SystemExit(1)
+
+attachments = message.get("Attachments") or []
+
+ok = (
+    message.get("Subject") == subject
+    and plain_token in (message.get("Text") or "")
+    and html_token in (message.get("HTML") or "")
+    and len(attachments) == 1
+    and attachments[0].get("FileName") == "heymail-capture-proof.txt"
+    and bool(attachments[0].get("PartID"))
+)
+
+raise SystemExit(0 if ok else 1)
+' \
+            "$RICH_SUBJECT" \
+            "$PLAIN_TOKEN" \
+            "$HTML_TOKEN"
+    then
+        RICH_FOUND=true
+        break
+    fi
+
+    sleep 1
+done
+
+[ "$RICH_FOUND" = true ] \
+    || fail "rich MIME message was not captured with text/html/attachment metadata"
+
+PART_ID="$(
+    printf '%s' "$RICH_JSON" \
+        | python3 \
+            -c '
+import json
+import sys
+
+message = json.load(sys.stdin)
+attachments = message.get("Attachments") or []
+
+if len(attachments) != 1:
+    raise SystemExit("attachment count mismatch")
+
+attachment = attachments[0]
+
+if attachment.get("FileName") != "heymail-capture-proof.txt":
+    raise SystemExit("attachment filename mismatch")
+
+print(attachment["PartID"])
+'
+)"
+
+[ -n "$PART_ID" ] \
+    || fail "captured attachment PartID is empty"
+
+curl \
+    -fsS \
+    "http://127.0.0.1:8025/api/v1/message/latest/part/${PART_ID}" \
+    | grep -Fq "$ATTACHMENT_TOKEN" \
+    || fail "captured attachment content does not match"
+
+curl \
+    -fsS \
+    http://127.0.0.1:8025/view/latest.txt \
+    | grep -Fq "$PLAIN_TOKEN" \
+    || fail "rendered text view is missing newsletter body"
+
+curl \
+    -fsS \
+    http://127.0.0.1:8025/view/latest.html \
+    | grep -Fq "$HTML_TOKEN" \
+    || fail "rendered HTML view is missing newsletter body"
+
+echo "PASS: rich MIME text + HTML + attachment captured locally"
+echo "PASS: Mailpit text and HTML preview endpoints render the captured newsletter"
 echo "ALL HARDENED CAPTURE TESTS PASSED"

@@ -153,6 +153,23 @@ cmd_open() {
     printf '%s\n' "$url"
 }
 
+cmd_dsn() {
+    local mode="${1:-host}"
+
+    case "$mode" in
+        host)
+            printf 'smtp://127.0.0.1:%s\n' \
+                "${HEYMAIL_CAPTURE_SMTP_PORT:-1025}"
+            ;;
+        docker)
+            printf 'smtp://capture:1025\n'
+            ;;
+        *)
+            fail "usage: heymail-capture dsn [host|docker]"
+            ;;
+    esac
+}
+
 find_compose_file() {
     local candidate
 
@@ -271,6 +288,7 @@ Usage:
   heymail-capture up
   heymail-capture status
   heymail-capture open
+  heymail-capture dsn [host|docker]
   heymail-capture logs [capture|ingress]
   heymail-capture down
   heymail-capture inject [compose-service]
@@ -303,6 +321,9 @@ case "$command" in
         ;;
     open)
         cmd_open "$@"
+        ;;
+    dsn)
+        cmd_dsn "$@"
         ;;
     inject)
         cmd_inject "$@"

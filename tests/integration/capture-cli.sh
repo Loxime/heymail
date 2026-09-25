@@ -58,6 +58,28 @@ CLI="$INSTALL_PREFIX/bin/heymail-capture"
 
 echo "PASS: CLI bundle installs into isolated prefix"
 
+HOST_DSN="$(
+    HEYMAIL_CAPTURE_HOME="$INSTALL_PREFIX/share/heymail-capture" \
+        "$CLI" \
+        dsn \
+        host
+)"
+
+[ "$HOST_DSN" = "smtp://127.0.0.1:1025" ] \
+    || fail "unexpected host capture DSN: $HOST_DSN"
+
+DOCKER_DSN="$(
+    HEYMAIL_CAPTURE_HOME="$INSTALL_PREFIX/share/heymail-capture" \
+        "$CLI" \
+        dsn \
+        docker
+)"
+
+[ "$DOCKER_DSN" = "smtp://capture:1025" ] \
+    || fail "unexpected Docker capture DSN: $DOCKER_DSN"
+
+echo "PASS: CLI exposes stable host and Docker SMTP DSNs"
+
 HEYMAIL_CAPTURE_HOME="$INSTALL_PREFIX/share/heymail-capture" \
     "$CLI" \
     up \
