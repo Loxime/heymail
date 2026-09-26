@@ -76,6 +76,7 @@ RUN set -eux; \
         > /etc/postfix/heymail-transport.regexp; \
     postconf -M 'smtp/inet=smtp inet n - n - - smtpd'; \
     postconf -P 'smtp/inet/syslog_name=postfix/heymail-inbound'; \
+    postconf -P 'smtp/inet/milter_macro_daemon_name=INBOUND'; \
     mkdir -p /var/log/postfix; \
     touch /var/log/postfix/heymail-inbound.log; \
     newaliases

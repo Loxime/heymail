@@ -49,6 +49,28 @@ grep -Fq \
 pass "inbound recipient policy is wired into the image"
 
 grep -Fq \
+    'milter_macro_daemon_name=INBOUND' \
+    docker/inbound-ingress/Dockerfile \
+    || fail "inbound SMTP does not identify itself to Rspamd"
+
+grep -Fq \
+    '"MTA-Name" = "^INBOUND$";' \
+    docker/rspamd/override.d/settings.conf \
+    || fail "Rspamd has no explicit inbound flow profile"
+
+grep -Fq \
+    '"FORCE_ACTION_REQUIRE_DKIM_SIGNATURE"' \
+    docker/rspamd/override.d/settings.conf \
+    || fail "inbound profile does not exempt external mail from outbound DKIM enforcement"
+
+grep -Fq \
+    'expression = "!DKIM_SIGNED";' \
+    docker/rspamd/override.d/force_actions.conf \
+    || fail "outbound DKIM enforcement was weakened"
+
+pass "Rspamd scopes mandatory HeyMail DKIM to outbound mail"
+
+grep -Fq \
     'postfix start' \
     docker/inbound-ingress/entrypoint.sh \
     || fail "inbound entrypoint does not start Postfix daemon"
