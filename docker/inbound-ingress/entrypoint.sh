@@ -106,9 +106,15 @@ done
 if [ "$READY" -ne 1 ]; then
     echo "Inbound dependencies did not become ready" >&2
 
-    kill         "$SRS_PID"         "$POLICY_PID"         2>/dev/null         || true
+    kill \
+        "$POLICY_PID" \
+        2>/dev/null \
+        || true
 
-    wait         "$SRS_PID"         "$POLICY_PID"         2>/dev/null         || true
+    wait \
+        "$POLICY_PID" \
+        2>/dev/null \
+        || true
 
     exit 1
 fi

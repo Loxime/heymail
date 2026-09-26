@@ -67,6 +67,29 @@ fi
 
 pass "inbound Postfix lifecycle is explicitly supervised"
 
+if grep -Fq \
+    'kill -0 "$SRS_PID"' \
+    docker/inbound-ingress/entrypoint.sh
+then
+    fail "PostSRSd liveness depends on CAP_KILL"
+fi
+
+if grep -Eq \
+    'kill[[:space:]]+["]?[$]SRS_PID' \
+    docker/inbound-ingress/entrypoint.sh
+then
+    fail "entrypoint attempts to signal PostSRSd without CAP_KILL"
+fi
+
+if grep -Eq \
+    'wait[[:space:]]+["]?[$]SRS_PID' \
+    docker/inbound-ingress/entrypoint.sh
+then
+    fail "entrypoint can block waiting for unsignalable PostSRSd"
+fi
+
+pass "PostSRSd supervision does not require CAP_KILL"
+
 
 
 TMP="$(
