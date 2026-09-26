@@ -1,0 +1,1489 @@
+/* ==========================================================================
+ * HeyMail — page-by-page product polish
+ * ======================================================================= */
+
+:root {
+  --hm-section-gap: 24px;
+  --hm-section-gap-lg: 30px;
+  --hm-panel-padding: 24px;
+  --hm-control-height: 44px;
+  --hm-row-height: 58px;
+
+  --hm-motion-fast: 140ms;
+  --hm-motion-normal: 180ms;
+  --hm-motion-slow: 240ms;
+
+  --hm-ease:
+    cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* --------------------------------------------------------------------------
+ * Shared page rhythm
+ * ----------------------------------------------------------------------- */
+
+.page {
+  padding-bottom: 8px;
+}
+
+.page-heading {
+  min-height: 88px;
+}
+
+.page-heading > div:first-child {
+  min-width: 0;
+}
+
+.page-heading h1 {
+  max-width: 920px;
+}
+
+.page-heading p {
+  max-width: 760px;
+}
+
+.inline-error,
+.send-error,
+.send-warning,
+.send-success,
+.authorization {
+  padding: 14px 16px;
+
+  border-radius: 11px;
+
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.inline-error,
+.send-error {
+  border: 1px solid #fecaca;
+}
+
+.send-warning {
+  border: 1px solid #fde68a;
+}
+
+.send-success {
+  border: 1px solid #bbf7d0;
+}
+
+.panel {
+  isolation: isolate;
+}
+
+.panel__header--row {
+  gap: 18px;
+}
+
+.panel__header--row > div {
+  min-width: 0;
+}
+
+.panel__header--row .button-group {
+  flex: 0 0 auto;
+}
+
+.button-group {
+  gap: 10px;
+}
+
+.button {
+  min-height: 41px;
+}
+
+.button svg {
+  flex: 0 0 auto;
+}
+
+.copy-button,
+.icon-button,
+.recipient-remove {
+  transition:
+    color var(--hm-motion-fast) ease,
+    background-color var(--hm-motion-fast) ease,
+    border-color var(--hm-motion-fast) ease,
+    transform var(--hm-motion-fast) ease;
+}
+
+.copy-button:hover,
+.icon-button:hover,
+.recipient-remove:hover {
+  transform: translateY(-1px);
+}
+
+.field small {
+  color: var(--hm-text-muted);
+
+  font-size: 10px;
+  line-height: 1.55;
+}
+
+.field input,
+.field select {
+  min-height: var(--hm-control-height);
+}
+
+.field textarea {
+  min-height: 108px;
+}
+
+.table-muted {
+  line-height: 1.5;
+}
+
+/* --------------------------------------------------------------------------
+ * Login
+ * ----------------------------------------------------------------------- */
+
+.login-page {
+  padding: clamp(24px, 6vw, 72px);
+
+  background:
+    radial-gradient(
+      circle at 20% 5%,
+      rgb(15 118 110 / 0.12),
+      transparent 32%
+    ),
+    radial-gradient(
+      circle at 90% 90%,
+      rgb(20 184 166 / 0.07),
+      transparent 28%
+    ),
+    #f7faf9;
+}
+
+.login-card {
+  width: min(470px, 100%);
+  padding: 42px;
+
+  border-radius: 20px;
+
+  box-shadow:
+    0 30px 80px rgb(15 23 42 / 0.10),
+    0 2px 5px rgb(15 23 42 / 0.03);
+}
+
+.login-brand {
+  gap: 15px;
+  margin-bottom: 38px;
+}
+
+.login-brand__mark {
+  width: 48px;
+  height: 48px;
+
+  border-radius: 13px;
+}
+
+.login-brand strong {
+  font-size: 18px;
+}
+
+.login-copy h1 {
+  margin-bottom: 11px;
+
+  font-size: 34px;
+  line-height: 1.08;
+}
+
+.login-copy p {
+  font-size: 14px;
+  line-height: 1.65;
+}
+
+.login-form {
+  gap: 20px;
+  margin-top: 32px;
+}
+
+.login-password {
+  min-height: 46px;
+  padding-inline: 12px;
+
+  border-radius: 10px;
+}
+
+.login-submit {
+  min-height: 46px;
+}
+
+/* --------------------------------------------------------------------------
+ * Dashboard
+ * ----------------------------------------------------------------------- */
+
+.period-pill {
+  display: inline-flex;
+  min-height: 40px;
+  align-items: center;
+
+  padding-inline: 14px;
+
+  border-radius: 10px;
+
+  font-size: 12px;
+}
+
+.dashboard-grid {
+  gap: 24px;
+}
+
+.panel--activity {
+  min-height: 365px;
+}
+
+.activity-chart {
+  padding-top: 24px;
+}
+
+.activity-chart__legend {
+  gap: 20px;
+  margin-bottom: 24px;
+
+  font-size: 11px;
+}
+
+.activity-chart__plot {
+  height: 230px;
+  gap: 7px;
+}
+
+.activity-chart__bars {
+  height: 190px;
+}
+
+.activity-chart__date {
+  margin-top: 8px;
+
+  font-size: 9px;
+}
+
+.health-list {
+  padding-top: 16px;
+}
+
+.health-row {
+  padding-block: 16px;
+}
+
+.health-row__copy {
+  margin-bottom: 9px;
+
+  font-size: 12px;
+}
+
+.health-progress {
+  height: 6px;
+}
+
+.recipient-domains-panel {
+  margin-bottom: 24px;
+}
+
+/* --------------------------------------------------------------------------
+ * Messages list
+ * ----------------------------------------------------------------------- */
+
+.message-filters {
+  border-radius: var(--hm-radius-lg);
+}
+
+.message-filters__heading {
+  margin-bottom: 19px;
+
+  font-size: 13px;
+}
+
+.message-filters__grid {
+  gap: 18px;
+}
+
+.message-filters__actions {
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.messages-panel {
+  min-height: 500px;
+}
+
+.data-table th,
+.data-table td {
+  height: var(--hm-row-height);
+}
+
+.data-table th {
+  height: 46px;
+}
+
+.message-id,
+.text-link {
+  font-size: 12px;
+}
+
+.message-table__open {
+  width: 58px;
+}
+
+.icon-link {
+  width: 34px;
+  height: 34px;
+
+  border-radius: 8px;
+}
+
+.load-more {
+  padding: 22px;
+}
+
+/* --------------------------------------------------------------------------
+ * Message detail
+ * ----------------------------------------------------------------------- */
+
+.back-link {
+  min-height: 34px;
+  gap: 8px;
+
+  margin-bottom: 22px;
+
+  font-size: 12px;
+}
+
+.message-detail-heading {
+  margin-bottom: 28px;
+}
+
+.message-title-row {
+  gap: 14px;
+}
+
+.message-detail-grid {
+  gap: 24px;
+}
+
+.timeline {
+  padding: 28px 26px;
+}
+
+.timeline-event {
+  grid-template-columns: 40px 1fr;
+  gap: 14px;
+}
+
+.timeline-event__icon {
+  width: 34px;
+  height: 34px;
+}
+
+.timeline-event__body {
+  padding: 5px 0 29px;
+}
+
+.timeline-event__heading strong {
+  font-size: 13px;
+}
+
+.timeline-event__heading time {
+  font-size: 11px;
+}
+
+.delivery-event-card {
+  margin-top: 13px;
+  padding: 15px;
+
+  border-radius: 10px;
+}
+
+.delivery-event-card p {
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.metadata-row {
+  gap: 20px;
+  padding-block: 16px;
+}
+
+.metadata-row dt,
+.metadata-row dd {
+  font-size: 11px;
+}
+
+/* --------------------------------------------------------------------------
+ * Send API
+ * ----------------------------------------------------------------------- */
+
+.send-layout {
+  gap: 24px;
+  align-items: start;
+}
+
+.send-form {
+  overflow: hidden;
+}
+
+.send-form__body {
+  padding: 26px;
+}
+
+.send-section + .send-section {
+  margin-top: 28px;
+  padding-top: 28px;
+
+  border-top: 1px solid #edf1f5;
+}
+
+.send-section__heading {
+  margin-bottom: 17px;
+}
+
+.send-section__heading strong {
+  font-size: 14px;
+}
+
+.send-section__heading span {
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.send-form__two,
+.send-content-grid {
+  gap: 16px;
+}
+
+.recipient-list {
+  gap: 10px;
+}
+
+.recipient-row {
+  gap: 10px;
+}
+
+.send-contact-picker {
+  gap: 10px;
+}
+
+.idempotency-field {
+  padding: 14px;
+
+  background: #f8fafc;
+
+  border: 1px solid #e7edf3;
+  border-radius: 10px;
+}
+
+.send-form__footer {
+  gap: 12px;
+  padding: 20px 26px;
+}
+
+.send-preview {
+  position: sticky;
+  top: 94px;
+
+  overflow: hidden;
+}
+
+.send-preview__meta,
+.send-preview__security {
+  padding: 19px 22px;
+}
+
+.send-preview__meta {
+  gap: 11px;
+}
+
+/* --------------------------------------------------------------------------
+ * Templates + visual editor
+ * ----------------------------------------------------------------------- */
+
+.template-workspace {
+  gap: 24px;
+}
+
+.template-list {
+  max-height: 700px;
+}
+
+.template-list__item {
+  gap: 6px;
+  padding: 18px 20px;
+}
+
+.template-list__item strong {
+  font-size: 13px;
+}
+
+.template-list__item span {
+  font-size: 10px;
+}
+
+.template-editor__body {
+  gap: 22px;
+  padding: 26px;
+}
+
+.template-editor-mode {
+  padding: 14px 16px;
+}
+
+.template-editor-mode small {
+  font-size: 10px;
+}
+
+.visual-email-editor__toolbar {
+  gap: 9px;
+}
+
+.visual-email-editor__workspace {
+  gap: 22px;
+}
+
+.visual-email-block {
+  box-shadow:
+    0 1px 2px rgb(15 23 42 / 0.025);
+}
+
+.visual-email-block__header {
+  padding: 12px 14px;
+}
+
+.visual-email-block__header strong {
+  font-size: 11px;
+}
+
+.visual-email-block__body {
+  gap: 15px;
+  padding: 17px;
+}
+
+.visual-email-columns-editor {
+  gap: 13px;
+}
+
+.visual-email-columns-editor__column {
+  gap: 11px;
+  padding: 13px;
+
+  border-radius: 9px;
+}
+
+.visual-email-canvas {
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.65);
+}
+
+.visual-email-canvas__email {
+  width: calc(100% - 36px);
+  margin-block: 20px;
+
+  box-shadow:
+    0 15px 35px rgb(15 23 42 / 0.08);
+}
+
+.visual-email-canvas__row {
+  padding: 13px 22px;
+}
+
+.template-preview-grid {
+  gap: 24px;
+}
+
+.template-preview {
+  margin-block: 30px;
+
+  border-radius: 13px;
+}
+
+.template-preview__subject {
+  gap: 5px;
+  padding: 16px 18px;
+}
+
+.template-preview__subject strong {
+  font-size: 12px;
+}
+
+.template-history__row {
+  padding: 17px 22px;
+}
+
+/* --------------------------------------------------------------------------
+ * Contacts
+ * ----------------------------------------------------------------------- */
+
+.contacts-segment__filters {
+  padding: 24px;
+}
+
+.contacts-search__input {
+  min-height: var(--hm-control-height);
+
+  padding-inline: 12px;
+
+  border-radius: 9px;
+}
+
+.contacts-grid {
+  gap: 24px;
+}
+
+.contacts-table {
+  max-height: 760px;
+}
+
+.contact-row {
+  gap: 11px;
+  padding: 18px 20px;
+}
+
+.contact-row strong {
+  font-size: 13px;
+}
+
+.contact-row > div:first-child > span {
+  margin-top: 4px;
+
+  font-size: 10px;
+}
+
+.contact-row__meta {
+  gap: 7px;
+}
+
+.contact-chip {
+  padding: 4px 8px;
+
+  font-size: 9px;
+}
+
+.contact-editor__body,
+.contacts-tool__body {
+  gap: 18px;
+  padding: 24px;
+}
+
+.contact-editor__actions {
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.contact-list-choices {
+  gap: 10px;
+}
+
+.contact-list-choices label {
+  gap: 7px;
+  padding: 8px 10px;
+
+  font-size: 10px;
+}
+
+.contacts-tools {
+  gap: 24px;
+}
+
+.contact-list-manager__row {
+  padding: 13px 14px;
+
+  border: 1px solid #edf1f5;
+  border-radius: 9px;
+}
+
+/* --------------------------------------------------------------------------
+ * Campaigns + automations
+ * ----------------------------------------------------------------------- */
+
+.campaign-grid,
+.campaign-preview-grid {
+  gap: 24px;
+}
+
+.campaign-list {
+  max-height: 650px;
+}
+
+.campaign-row {
+  gap: 6px;
+  padding: 18px 20px;
+}
+
+.campaign-row strong {
+  font-size: 13px;
+}
+
+.campaign-row span {
+  font-size: 10px;
+}
+
+.campaign-form,
+.campaign-control__body {
+  gap: 18px;
+  padding: 24px;
+}
+
+.campaign-tracking-option {
+  gap: 11px;
+  padding: 15px 16px;
+
+  transition:
+    border-color var(--hm-motion-fast) ease,
+    background-color var(--hm-motion-fast) ease,
+    box-shadow var(--hm-motion-fast) ease;
+}
+
+.campaign-tracking-option:hover {
+  background: #fbfdfd;
+  border-color: #cfe5e2;
+}
+
+.campaign-tracking-option strong {
+  font-size: 12px;
+}
+
+.campaign-tracking-option small {
+  font-size: 10px;
+}
+
+.campaign-tracking-stat {
+  gap: 6px;
+  padding: 22px;
+}
+
+.campaign-tracking-stat strong {
+  font-size: 27px;
+}
+
+.campaign-progress {
+  gap: 11px;
+}
+
+.campaign-progress span {
+  font-size: 10px;
+}
+
+.campaign-progress progress {
+  height: 10px;
+}
+
+.template-history__list {
+  min-width: 0;
+}
+
+/* --------------------------------------------------------------------------
+ * Suppressions
+ * ----------------------------------------------------------------------- */
+
+.suppression-grid {
+  gap: 24px;
+}
+
+.suppression-form {
+  gap: 18px;
+  padding: 24px;
+}
+
+.suppression-row {
+  gap: 20px;
+  padding: 18px 20px;
+
+  transition:
+    background-color var(--hm-motion-fast) ease;
+}
+
+.suppression-row:hover {
+  background: #fbfcfd;
+}
+
+.suppression-row strong {
+  font-size: 12px;
+}
+
+.suppression-row span {
+  font-size: 10px;
+}
+
+/* --------------------------------------------------------------------------
+ * Domains
+ * ----------------------------------------------------------------------- */
+
+.create-resource {
+  gap: 32px;
+  padding: 24px 26px;
+}
+
+.create-resource__copy {
+  gap: 15px;
+}
+
+.create-resource__copy strong {
+  font-size: 13px;
+}
+
+.create-resource__copy p {
+  margin-top: 5px;
+
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+.create-resource__form {
+  gap: 10px;
+}
+
+.resource-grid {
+  gap: 24px;
+}
+
+.resource-card {
+  border-radius: 15px;
+
+  transition:
+    transform var(--hm-motion-normal) var(--hm-ease),
+    border-color var(--hm-motion-normal) ease,
+    box-shadow var(--hm-motion-normal) ease;
+}
+
+.resource-card:hover {
+  transform: translateY(-2px);
+
+  border-color: #d7e0e8;
+
+  box-shadow:
+    0 12px 30px rgb(15 23 42 / 0.065);
+}
+
+.resource-card__header {
+  gap: 15px;
+  padding: 21px 22px;
+}
+
+.resource-card__title {
+  gap: 5px;
+}
+
+.resource-card__section {
+  padding: 19px 22px;
+}
+
+.resource-card__section-heading {
+  margin-bottom: 13px;
+}
+
+.dns-record {
+  gap: 12px;
+  padding: 12px 13px;
+
+  border-radius: 9px;
+}
+
+.dns-value {
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+/* --------------------------------------------------------------------------
+ * Senders
+ * ----------------------------------------------------------------------- */
+
+.sender-address-builder {
+  min-width: min(680px, 100%);
+}
+
+.sender-address-builder__address {
+  gap: 10px;
+}
+
+.sender-preview {
+  margin-top: -3px;
+  margin-bottom: 22px;
+
+  font-size: 12px;
+}
+
+.sender-avatar {
+  width: 38px;
+  height: 38px;
+}
+
+.sender-cell {
+  gap: 12px;
+}
+
+.authorization {
+  gap: 10px;
+}
+
+.ready-label {
+  min-height: 26px;
+
+  padding-inline: 9px;
+}
+
+/* --------------------------------------------------------------------------
+ * Webhooks
+ * ----------------------------------------------------------------------- */
+
+.webhook-create {
+  margin-bottom: 24px;
+
+  overflow: hidden;
+}
+
+.webhook-create__header {
+  gap: 18px;
+  padding: 22px 24px;
+}
+
+.webhook-create__actions {
+  gap: 10px;
+}
+
+.webhook-url-field {
+  padding: 20px 24px;
+}
+
+.webhook-events {
+  padding: 20px 24px 24px;
+}
+
+.webhook-events__label {
+  margin-bottom: 12px;
+
+  font-size: 10px;
+}
+
+.webhook-events__grid {
+  gap: 9px;
+}
+
+.webhook-event {
+  min-height: 42px;
+  gap: 8px;
+
+  padding: 9px 11px;
+
+  border-radius: 9px;
+
+  transition:
+    color var(--hm-motion-fast) ease,
+    background-color var(--hm-motion-fast) ease,
+    border-color var(--hm-motion-fast) ease;
+}
+
+.webhook-list {
+  overflow: hidden;
+}
+
+.webhook-row {
+  gap: 17px;
+  padding: 20px 22px;
+
+  transition:
+    background-color var(--hm-motion-fast) ease;
+}
+
+.webhook-row:hover {
+  background: #fbfcfd;
+}
+
+.webhook-row__main {
+  gap: 6px;
+}
+
+.webhook-row__meta {
+  gap: 8px;
+}
+
+.webhook-secret-card {
+  padding: 20px;
+
+  border-radius: 12px;
+}
+
+.webhook-secret-value {
+  margin-block: 14px;
+  padding: 13px 14px;
+
+  border-radius: 9px;
+}
+
+/* --------------------------------------------------------------------------
+ * API credentials
+ * ----------------------------------------------------------------------- */
+
+.developer-grid {
+  gap: 24px;
+}
+
+.credential-overview__body {
+  padding: 24px;
+}
+
+.credential-security {
+  gap: 16px;
+  padding: 20px;
+
+  border-radius: 12px;
+}
+
+.credential-security__icon {
+  width: 40px;
+  height: 40px;
+
+  border-radius: 10px;
+}
+
+.security-row {
+  gap: 14px;
+  padding: 15px 0;
+}
+
+.security-row__icon {
+  width: 34px;
+  height: 34px;
+}
+
+.code-panel {
+  margin-top: 24px;
+}
+
+.code-panel pre {
+  padding: 20px;
+
+  font-size: 11px;
+  line-height: 1.65;
+}
+
+/* --------------------------------------------------------------------------
+ * Documentation
+ * ----------------------------------------------------------------------- */
+
+.docs-hero {
+  gap: 20px;
+  margin-bottom: 24px;
+  padding: 28px;
+
+  border-radius: 16px;
+}
+
+.docs-hero__icon {
+  width: 48px;
+  height: 48px;
+
+  border-radius: 12px;
+}
+
+.docs-concepts {
+  gap: 24px;
+  margin-bottom: 24px;
+}
+
+.concept-card {
+  padding: 23px;
+
+  border-radius: 14px;
+
+  transition:
+    transform var(--hm-motion-normal) var(--hm-ease),
+    border-color var(--hm-motion-normal) ease,
+    box-shadow var(--hm-motion-normal) ease;
+}
+
+.concept-card:hover {
+  transform: translateY(-2px);
+
+  box-shadow:
+    0 10px 26px rgb(15 23 42 / 0.055);
+}
+
+.concept-card strong {
+  font-size: 13px;
+}
+
+.concept-card p {
+  font-size: 11px;
+  line-height: 1.65;
+}
+
+.endpoint-list {
+  padding: 8px 0;
+}
+
+.endpoint-row {
+  gap: 16px;
+  padding: 18px 22px;
+
+  transition:
+    background-color var(--hm-motion-fast) ease;
+}
+
+.endpoint-row:hover {
+  background: #fbfcfd;
+}
+
+.endpoint-row__icon {
+  width: 38px;
+  height: 38px;
+}
+
+/* --------------------------------------------------------------------------
+ * Profile
+ * ----------------------------------------------------------------------- */
+
+.profile-stats {
+  gap: 18px;
+  margin-bottom: 24px;
+}
+
+.profile-stat {
+  min-height: 92px;
+  gap: 17px;
+  padding: 22px;
+}
+
+.profile-stat__icon {
+  width: 42px;
+  height: 42px;
+
+  border-radius: 11px;
+}
+
+.profile-stat span {
+  font-size: 10px;
+}
+
+.profile-stat strong {
+  margin-top: 5px;
+
+  font-size: 25px;
+}
+
+.profile-grid {
+  gap: 24px;
+  margin-bottom: 24px;
+}
+
+.profile-panel {
+  margin-bottom: 24px;
+}
+
+.profile-panel__body {
+  gap: 19px;
+  padding: 24px;
+}
+
+.profile-avatar {
+  width: 58px;
+  height: 58px;
+}
+
+.profile-form-grid {
+  gap: 16px;
+}
+
+.favorite-list {
+  gap: 10px;
+}
+
+.favorite-row {
+  gap: 14px;
+  padding: 13px 14px;
+
+  border: 1px solid #edf1f5;
+  border-radius: 9px;
+
+  transition:
+    border-color var(--hm-motion-fast) ease,
+    background-color var(--hm-motion-fast) ease;
+}
+
+.favorite-row:hover {
+  background: #fbfcfd;
+  border-color: #dde5ec;
+}
+
+/* --------------------------------------------------------------------------
+ * Settings
+ * ----------------------------------------------------------------------- */
+
+.settings-grid {
+  gap: 24px;
+  margin-bottom: 24px;
+}
+
+.settings-card {
+  min-height: 170px;
+  gap: 18px;
+  padding: 24px;
+
+  border-radius: 15px;
+
+  transition:
+    transform var(--hm-motion-normal) var(--hm-ease),
+    border-color var(--hm-motion-normal) ease,
+    box-shadow var(--hm-motion-normal) ease;
+}
+
+.settings-card:hover {
+  transform: translateY(-2px);
+
+  border-color: #d9e2e9;
+
+  box-shadow:
+    0 10px 28px rgb(15 23 42 / 0.055);
+}
+
+.settings-card__icon {
+  width: 42px;
+  height: 42px;
+
+  border-radius: 11px;
+}
+
+.settings-note {
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.security-posture {
+  margin-top: 24px;
+}
+
+.security-checklist {
+  padding: 8px 24px 18px;
+}
+
+.security-check {
+  gap: 13px;
+  padding: 15px 0;
+}
+
+.security-check strong {
+  font-size: 12px;
+}
+
+/* --------------------------------------------------------------------------
+ * Empty / error states
+ * ----------------------------------------------------------------------- */
+
+.empty-state,
+.template-empty {
+  min-height: 260px;
+
+  padding: 42px 28px;
+}
+
+.empty-state__icon {
+  width: 52px;
+  height: 52px;
+
+  margin-bottom: 16px;
+
+  border-radius: 14px;
+}
+
+.empty-state strong {
+  font-size: 14px;
+}
+
+.empty-state span {
+  margin-top: 7px;
+
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.not-found {
+  min-height: calc(
+    100vh
+    - var(--hm-topbar-height)
+    - 150px
+  );
+
+  padding: 60px 24px;
+}
+
+.not-found__icon {
+  width: 64px;
+  height: 64px;
+
+  margin-bottom: 20px;
+
+  border-radius: 18px;
+}
+
+/* --------------------------------------------------------------------------
+ * Smooth interaction layer
+ * ----------------------------------------------------------------------- */
+
+.template-list__item,
+.contact-row,
+.campaign-row,
+.webhook-event,
+.webhook-row,
+.endpoint-row,
+.favorite-row,
+.suppression-row {
+  transition:
+    color var(--hm-motion-fast) ease,
+    background-color var(--hm-motion-fast) ease,
+    border-color var(--hm-motion-fast) ease,
+    box-shadow var(--hm-motion-fast) ease;
+}
+
+.template-list__item:active,
+.contact-row:active,
+.campaign-row:active {
+  transform: scale(0.997);
+}
+
+.skeleton {
+  animation-duration: 1.45s;
+}
+
+/* --------------------------------------------------------------------------
+ * Tablet
+ * ----------------------------------------------------------------------- */
+
+@media (max-width: 1100px) {
+  .send-preview {
+    position: static;
+  }
+
+  .create-resource {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .create-resource__form {
+    width: 100%;
+  }
+
+  .sender-address-builder {
+    min-width: 0;
+  }
+}
+
+/* --------------------------------------------------------------------------
+ * Mobile
+ * ----------------------------------------------------------------------- */
+
+@media (max-width: 760px) {
+  :root {
+    --hm-section-gap: 18px;
+    --hm-panel-padding: 18px;
+  }
+
+  .page-heading {
+    min-height: 0;
+  }
+
+  .page-heading p {
+    font-size: 13px;
+  }
+
+  .panel__header--row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .panel__header--row .button-group {
+    width: 100%;
+  }
+
+  .panel__header--row .button-group .button {
+    flex: 1;
+  }
+
+  .button {
+    min-height: 43px;
+  }
+
+  .data-table th,
+  .data-table td {
+    height: 52px;
+    padding-inline: 16px;
+  }
+
+  .message-filters,
+  .contacts-segment__filters,
+  .send-form__body,
+  .send-form__footer,
+  .template-editor__body,
+  .contact-editor__body,
+  .contacts-tool__body,
+  .campaign-form,
+  .campaign-control__body,
+  .suppression-form,
+  .profile-panel__body {
+    padding: 18px;
+  }
+
+  .login-card {
+    padding: 28px 22px;
+  }
+
+  .login-copy h1 {
+    font-size: 30px;
+  }
+
+  .activity-chart {
+    padding-inline: 18px;
+  }
+
+  .timeline {
+    padding: 20px 18px;
+  }
+
+  .timeline-event {
+    grid-template-columns: 36px 1fr;
+    gap: 11px;
+  }
+
+  .send-section + .send-section {
+    margin-top: 22px;
+    padding-top: 22px;
+  }
+
+  .template-list__item,
+  .contact-row,
+  .campaign-row,
+  .webhook-row,
+  .suppression-row {
+    padding: 16px;
+  }
+
+  .visual-email-canvas__email {
+    width: calc(100% - 20px);
+  }
+
+  .resource-card__header,
+  .resource-card__section {
+    padding-inline: 17px;
+  }
+
+  .profile-stat,
+  .settings-card,
+  .concept-card {
+    padding: 19px;
+  }
+
+  .endpoint-row {
+    padding-inline: 17px;
+  }
+}
+
+/* --------------------------------------------------------------------------
+ * Reduced motion
+ * ----------------------------------------------------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+  .resource-card:hover,
+  .concept-card:hover,
+  .settings-card:hover,
+  .template-list__item:active,
+  .contact-row:active,
+  .campaign-row:active {
+    transform: none;
+  }
+}

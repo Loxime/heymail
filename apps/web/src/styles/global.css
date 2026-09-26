@@ -1,6 +1,7 @@
 @import './tokens.css';
 @import './v11.css';
 @import './polish.css';
+@import './polish-pages.css';
 
 * {
   box-sizing: border-box;
