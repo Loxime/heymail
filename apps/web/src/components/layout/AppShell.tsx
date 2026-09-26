@@ -322,7 +322,12 @@ export function AppShell() {
         </header>
 
         <div className="app-content">
-          <Outlet />
+          <div
+            className="route-frame"
+            key={location.pathname}
+          >
+            <Outlet />
+          </div>
         </div>
       </main>
     </div>
