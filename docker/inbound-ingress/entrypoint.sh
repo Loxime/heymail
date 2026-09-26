@@ -68,22 +68,67 @@ postsrsd \
     -C/run/heymail/postsrsd.conf &
 SRS_PID="$!"
 
-postfix check
+READY=0
+ATTEMPT=0
 
-postfix start-fg &
-POSTFIX_PID="$!"
+while [ "$ATTEMPT" -lt 15 ]
+do
+    ATTEMPT=$((ATTEMPT + 1))
+
+    if ! kill -0 "$POLICY_PID" 2>/dev/null; then
+        echo "Inbound recipient policy exited during startup" >&2
+        break
+    fi
+
+    if [ ! -r "/proc/$SRS_PID/stat" ]; then
+        echo "PostSRSd exited during startup" >&2
+        break
+    fi
+
+    if python3 - <<'PY_READY' >/dev/null 2>&1
+import socket
+
+for port in (10003, 10031):
+    with socket.create_connection(
+        ("127.0.0.1", port),
+        timeout=1,
+    ):
+        pass
+PY_READY
+    then
+        READY=1
+        break
+    fi
+
+    sleep 1
+done
+
+if [ "$READY" -ne 1 ]; then
+    echo "Inbound dependencies did not become ready" >&2
+
+    kill         "$SRS_PID"         "$POLICY_PID"         2>/dev/null         || true
+
+    wait         "$SRS_PID"         "$POLICY_PID"         2>/dev/null         || true
+
+    exit 1
+fi
+
+echo "Inbound dependencies ready"
+
+postfix check
+postfix start
 
 terminate() {
+    postfix stop \
+        >/dev/null 2>&1 \
+        || true
+
     kill \
-        "$POSTFIX_PID" \
-        "$SRS_PID" \
         "$POLICY_PID" \
         2>/dev/null \
         || true
 
     wait \
-        "$POSTFIX_PID" \
-        "$SRS_PID" \
         "$POLICY_PID" \
         2>/dev/null \
         || true
@@ -93,26 +138,36 @@ terminate() {
 
 trap terminate INT TERM
 
-while \
-    kill -0 "$POSTFIX_PID" 2>/dev/null \
-    && kill -0 "$SRS_PID" 2>/dev/null \
-    && kill -0 "$POLICY_PID" 2>/dev/null
+while true
 do
+    if [ ! -r "/proc/$SRS_PID/stat" ]; then
+        echo "PostSRSd exited" >&2
+        break
+    fi
+
+    if ! kill -0 "$POLICY_PID" 2>/dev/null; then
+        echo "Inbound recipient policy exited" >&2
+        break
+    fi
+
+    if ! postfix status >/dev/null 2>&1; then
+        echo "Inbound Postfix exited" >&2
+        break
+    fi
+
     sleep 1
 done
 
-echo "Inbound ingress child process exited" >&2
+postfix stop \
+    >/dev/null 2>&1 \
+    || true
 
 kill \
-    "$POSTFIX_PID" \
-    "$SRS_PID" \
     "$POLICY_PID" \
     2>/dev/null \
     || true
 
 wait \
-    "$POSTFIX_PID" \
-    "$SRS_PID" \
     "$POLICY_PID" \
     2>/dev/null \
     || true

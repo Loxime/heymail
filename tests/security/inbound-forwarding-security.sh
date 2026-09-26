@@ -48,6 +48,26 @@ grep -Fq \
 
 pass "inbound recipient policy is wired into the image"
 
+grep -Fq \
+    'postfix start' \
+    docker/inbound-ingress/entrypoint.sh \
+    || fail "inbound entrypoint does not start Postfix daemon"
+
+grep -Fq \
+    'postfix status' \
+    docker/inbound-ingress/entrypoint.sh \
+    || fail "inbound entrypoint does not supervise Postfix"
+
+if grep -Fq \
+    'postfix start-fg &' \
+    docker/inbound-ingress/entrypoint.sh
+then
+    fail "inbound entrypoint backgrounds postfix start-fg"
+fi
+
+pass "inbound Postfix lifecycle is explicitly supervised"
+
+
 
 TMP="$(
     mktemp -d
